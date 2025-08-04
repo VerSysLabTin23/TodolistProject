@@ -13,27 +13,25 @@ Use lowercase and dashes.
 
 
 2. Developer workflow
-
-    Create a feature branch from main:
-
+    - Create a feature branch from main:
+	```
 	git checkout main
 	git pull origin main
 	git checkout -b feature/<task-name>
-
-    Git commit and push the branch to GitHub:
-
+	```
+    - Git commit and push the branch to GitHub:
+	```
 	git commit
 	git push origin feature/<task-name>
+	```
+    - Create a Pull Request in github
 
-    Create a Pull Request in github
-
-    Code Review
-
-    After successful review and test, merge and delete the branch:
-
+    - Code Review
+    -  After successful review and test, merge and delete the branch:
+	```
 	git branch -d feature/<task-name>
 	git push origin --delete feature/<task-name>
-
+	```
 3. Merge and CI
 
     main should be a protected branch (no direct pushes)
