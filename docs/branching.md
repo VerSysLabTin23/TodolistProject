@@ -1,6 +1,5 @@
 
-
-3. Branch naming
+1. Branch naming
 
 Type/action-module
 Type 	Example 	Use case
@@ -11,7 +10,7 @@ test 	test/add-backend-tests 	Testing-related change
 chore 	chore/update-gitignore 	Setup or config change
 
 Use lowercase and dashes.
-4. Developer workflow
+2. Developer workflow
 
     Create a feature branch from main:
 
@@ -33,7 +32,7 @@ Use lowercase and dashes.
 	git branch -d feature/<task-name>
 	git push origin --delete feature/<task-name>
 
-5. Merge and CI
+3. Merge and CI
 
     main should be a protected branch (no direct pushes)
     All changes must go through PRs
