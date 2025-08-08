@@ -1,0 +1,159 @@
+# https://editor.swagger.io/
+openapi: 3.0.0
+info:
+  title: Task Service API
+  version: 1.0.0
+  description: REST API for managing tasks in a distributed ToDo application.
+
+servers:
+  - url: http://localhost:8081
+    description: Local development server
+
+paths:
+  /tasks:
+    get:
+      summary: Retrieve all tasks
+      description: Returns a list of all existing tasks.
+      responses:
+        '200':
+          description: A list of tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+
+    post:
+      summary: Create a new task
+      description: Adds a new task to the task list.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewTask'
+      responses:
+        '201':
+          description: Task created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+
+  /tasks/{id}:
+    get:
+      summary: Retrieve a single task
+      description: Returns the task with the specified ID.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique ID of the task
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Task found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '404':
+          description: Task not found
+
+    put:
+      summary: Update a task
+      description: Updates the title, description, or status of an existing task.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique ID of the task to be updated
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTask'
+      responses:
+        '200':
+          description: Task updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '404':
+          description: Task not found
+
+    delete:
+      summary: Delete a task
+      description: Removes the task with the specified ID from the list.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique ID of the task to be deleted
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Task deleted successfully
+        '404':
+          description: Task not found
+
+components:
+  schemas:
+    Task:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        title:
+          type: string
+          example: "Design API documentation"
+        description:
+          type: string
+          example: "Write OpenAPI spec for task service"
+        completed:
+          type: boolean
+          example: false
+        createdAt:
+          type: string
+          format: date-time
+          example: "2025-08-07T14:45:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2025-08-07T15:00:00Z"
+
+    NewTask:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+          example: "Design API documentation"
+        description:
+          type: string
+          example: "Write OpenAPI spec for task service"
+        completed:
+          type: boolean
+          example: false
+
+    UpdateTask:
+      type: object
+      properties:
+        title:
+          type: string
+          example: "Update task title"
+        description:
+          type: string
+          example: "Refine task description"
+        completed:
+          type: boolean
+          example: true
