@@ -3,17 +3,24 @@ openapi: 3.0.0
 info:
   title: Task Service API
   version: 1.0.0
-  description: REST API for managing tasks in a distributed ToDo application.
+  description: REST API for managing tasks. By default sort by priority then due time.
 
 servers:
   - url: http://localhost:8081
     description: Local development server
 
 paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+
   /tasks:
     get:
       summary: Retrieve all tasks
-      description: Returns a list of all existing tasks.
+      description: Returns all tasks sorted by priority (high→low) then due date (earliest first).
       responses:
         '200':
           description: A list of tasks
@@ -26,7 +33,6 @@ paths:
 
     post:
       summary: Create a new task
-      description: Adds a new task to the task list.
       requestBody:
         required: true
         content:
@@ -35,7 +41,7 @@ paths:
               $ref: '#/components/schemas/NewTask'
       responses:
         '201':
-          description: Task created successfully
+          description: Task created
           content:
             application/json:
               schema:
@@ -44,14 +50,8 @@ paths:
   /tasks/{id}:
     get:
       summary: Retrieve a single task
-      description: Returns the task with the specified ID.
       parameters:
-        - name: id
-          in: path
-          required: true
-          description: Unique ID of the task
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/TaskId'
       responses:
         '200':
           description: Task found
@@ -61,17 +61,15 @@ paths:
                 $ref: '#/components/schemas/Task'
         '404':
           description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
     put:
       summary: Update a task
-      description: Updates the title, description, or status of an existing task.
       parameters:
-        - name: id
-          in: path
-          required: true
-          description: Unique ID of the task to be updated
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/TaskId'
       requestBody:
         required: true
         content:
@@ -80,80 +78,101 @@ paths:
               $ref: '#/components/schemas/UpdateTask'
       responses:
         '200':
-          description: Task updated successfully
+          description: Task updated
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Task'
         '404':
           description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
     delete:
       summary: Delete a task
-      description: Removes the task with the specified ID from the list.
       parameters:
-        - name: id
-          in: path
-          required: true
-          description: Unique ID of the task to be deleted
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/TaskId'
       responses:
         '204':
-          description: Task deleted successfully
+          description: Deleted
         '404':
           description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
 components:
+  parameters:
+    TaskId:
+      name: id
+      in: path
+      required: true
+      description: Unique task ID
+      schema:
+        type: integer
+
   schemas:
     Task:
       type: object
+      required: [id, title, completed, priority, due, createdAt, updatedAt]
       properties:
-        id:
-          type: integer
-          example: 1
-        title:
-          type: string
-          example: "Design API documentation"
+        id: { type: integer, example: 1 }
+        title: { type: string, example: "Design API documentation" }
         description:
           type: string
+          nullable: true
           example: "Write OpenAPI spec for task service"
-        completed:
-          type: boolean
-          example: false
-        createdAt:
+        completed: { type: boolean, example: false }
+        priority:
           type: string
-          format: date-time
-          example: "2025-08-07T14:45:00Z"
-        updatedAt:
+          enum: ["low","medium","high"]
+          example: "medium"
+        due:
           type: string
-          format: date-time
-          example: "2025-08-07T15:00:00Z"
+          format: date
+          example: "2025-08-20"
+        createdAt: { type: string, format: date-time, example: "2025-08-10T09:30:00Z" }
+        updatedAt: { type: string, format: date-time, example: "2025-08-10T09:45:00Z" }
 
     NewTask:
       type: object
-      required:
-        - title
+      required: [title, priority, due]
       properties:
-        title:
-          type: string
-          example: "Design API documentation"
+        title: { type: string, example: "Design API documentation" }
         description:
           type: string
-          example: "Write OpenAPI spec for task service"
-        completed:
-          type: boolean
-          example: false
+          nullable: true
+        completed: { type: boolean, default: false }
+        priority:
+          type: string
+          enum: ["low","medium","high"]
+          example: "medium"
+        due:
+          type: string
+          format: date
+          example: "2025-08-20"
 
     UpdateTask:
       type: object
       properties:
-        title:
-          type: string
-          example: "Update task title"
+        title: { type: string }
         description:
           type: string
-          example: "Refine task description"
-        completed:
-          type: boolean
-          example: true
+          nullable: true
+        completed: { type: boolean }
+        priority:
+          type: string
+          enum: ["low","medium","high"]
+        due:
+          type: string
+          format: date
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, example: "NOT_FOUND" }
+        message: { type: string, example: "Task not found" }
