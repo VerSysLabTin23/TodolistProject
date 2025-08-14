@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due);
+CREATE INDEX idx_tasks_due ON tasks(due);
 
 -- migrate:down
-DROP INDEX IF EXISTS idx_tasks_due ON tasks;
-DROP TABLE IF EXISTS tasks;
+DROP INDEX idx_tasks_due ON tasks;
+DROP TABLE tasks;

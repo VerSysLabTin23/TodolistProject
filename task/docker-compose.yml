@@ -1,0 +1,79 @@
+name: task-service-dev
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: task_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: pass
+      MYSQL_DATABASE: tasksdb
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-ppass"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    networks: [app-net]
+
+  # migration（dbmate）
+  dbmate:
+    image: amacneil/dbmate:latest
+    container_name: task_dbmate
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "mysql://root:pass@mysql:3306/tasksdb?parseTime=true&loc=UTC&charset=utf8mb4"
+    volumes:
+      - ./migrations:/db/migrations:ro
+    command: ["up"]
+    restart: "no"
+    networks: [app-net]
+
+  task-service:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    depends_on:
+      mysql:
+        condition: service_healthy
+      dbmate:
+        condition: service_completed_successfully
+    environment:
+      PORT: "8081"
+      DB_HOST: "mysql"
+      DB_PORT: "3306"
+      DB_USER: "root"
+      DB_PASS: "pass"
+      DB_NAME: "tasksdb"
+      # if use DATABASE_URL，then add this：
+      # DATABASE_URL: "mysql://root:pass@mysql:3306/tasksdb?parseTime=true&loc=UTC&charset=utf8mb4"
+    ports:
+      - "8081:8081"
+    networks: [app-net]
+
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: task_phpmyadmin
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      PMA_HOST: mysql          # 连接同一网络下名为 mysql 的服务
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: pass
+      UPLOAD_LIMIT: 64M        # 可选：导入 SQL 的大小限制
+    ports:
+      - "8082:80"              # 打开 http://localhost:8082
+    networks: [app-net]
+
+networks:
+  app-net:
+
+volumes:
+  mysql-data:
