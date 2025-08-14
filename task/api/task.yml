@@ -1,0 +1,178 @@
+# https://editor.swagger.io/
+openapi: 3.0.0
+info:
+  title: Task Service API
+  version: 1.0.0
+  description: REST API for managing tasks. By default sort by priority then due time.
+
+servers:
+  - url: http://localhost:8081
+    description: Local development server
+
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+
+  /tasks:
+    get:
+      summary: Retrieve all tasks
+      description: Returns all tasks sorted by priority (high→low) then due date (earliest first).
+      responses:
+        '200':
+          description: A list of tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+
+    post:
+      summary: Create a new task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewTask'
+      responses:
+        '201':
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+
+  /tasks/{id}:
+    get:
+      summary: Retrieve a single task
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '200':
+          description: Task found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: Update a task
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTask'
+      responses:
+        '200':
+          description: Task updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete a task
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  parameters:
+    TaskId:
+      name: id
+      in: path
+      required: true
+      description: Unique task ID
+      schema:
+        type: integer
+
+  schemas:
+    Task:
+      type: object
+      required: [id, title, completed, priority, due, createdAt, updatedAt]
+      properties:
+        id: { type: integer, example: 1 }
+        title: { type: string, example: "Design API documentation" }
+        description:
+          type: string
+          nullable: true
+          example: "Write OpenAPI spec for task service"
+        completed: { type: boolean, example: false }
+        priority:
+          type: string
+          enum: ["low","medium","high"]
+          example: "medium"
+        due:
+          type: string
+          format: date
+          example: "2025-08-20"
+        createdAt: { type: string, format: date-time, example: "2025-08-10T09:30:00Z" }
+        updatedAt: { type: string, format: date-time, example: "2025-08-10T09:45:00Z" }
+
+    NewTask:
+      type: object
+      required: [title, priority, due]
+      properties:
+        title: { type: string, example: "Design API documentation" }
+        description:
+          type: string
+          nullable: true
+        completed: { type: boolean, default: false }
+        priority:
+          type: string
+          enum: ["low","medium","high"]
+          example: "medium"
+        due:
+          type: string
+          format: date
+          example: "2025-08-20"
+
+    UpdateTask:
+      type: object
+      properties:
+        title: { type: string }
+        description:
+          type: string
+          nullable: true
+        completed: { type: boolean }
+        priority:
+          type: string
+          enum: ["low","medium","high"]
+        due:
+          type: string
+          format: date
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, example: "NOT_FOUND" }
+        message: { type: string, example: "Task not found" }

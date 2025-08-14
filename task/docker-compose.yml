@@ -1,7 +1,7 @@
-name: todo-dev
-# include services that are implemented
+name: task-service-dev
+
 services:
-  task-db:
+  mysql:
     image: mysql:8.0
     container_name: task_mysql
     environment:
@@ -9,8 +9,8 @@ services:
       MYSQL_DATABASE: tasksdb
     ports:
       - "3306:3306"
-    # volumes:
-    #   - mysql-data:/var/lib/mysql
+    volumes:
+      - mysql-data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-ppass"]
       interval: 5s
@@ -18,33 +18,33 @@ services:
       retries: 15
     networks: [app-net]
 
-  # migration（dbmate） after sucess run, exit
+  # migration（dbmate）
   dbmate:
     image: amacneil/dbmate:latest
     container_name: task_dbmate
     depends_on:
-      task-db:
+      mysql:
         condition: service_healthy
     environment:
-      DATABASE_URL: "mysql://root:pass@task-db:3306/tasksdb?parseTime=true&loc=UTC&charset=utf8mb4"
+      DATABASE_URL: "mysql://root:pass@mysql:3306/tasksdb?parseTime=true&loc=UTC&charset=utf8mb4"
     volumes:
-      - ./task/migrations:/db/migrations:ro
+      - ./migrations:/db/migrations:ro
     command: ["up"]
     restart: "no"
     networks: [app-net]
 
   task-service:
     build:
-      context: ./task
+      context: .
       dockerfile: ./Dockerfile
     depends_on:
-      task-db:
+      mysql:
         condition: service_healthy
       dbmate:
         condition: service_completed_successfully
     environment:
       PORT: "8081"
-      DB_HOST: "task-db"
+      DB_HOST: "mysql"
       DB_PORT: "3306"
       DB_USER: "root"
       DB_PASS: "pass"
@@ -60,17 +60,20 @@ services:
     image: phpmyadmin:latest
     container_name: task_phpmyadmin
     depends_on:
-      task-db:
+      mysql:
         condition: service_healthy
     environment:
-      PMA_HOST: task-db      
+      PMA_HOST: mysql          # 连接同一网络下名为 mysql 的服务
       PMA_PORT: 3306
       PMA_USER: root
       PMA_PASSWORD: pass
-      UPLOAD_LIMIT: 64M      
+      UPLOAD_LIMIT: 64M        # 可选：导入 SQL 的大小限制
     ports:
-      - "8082:80"              
+      - "8082:80"              # 打开 http://localhost:8082
     networks: [app-net]
 
 networks:
   app-net:
+
+volumes:
+  mysql-data:
