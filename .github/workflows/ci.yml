@@ -13,8 +13,7 @@ jobs:
 
     strategy:
       matrix:
-        # service: [auth, task, team, api-gateway, notification, realtime, frontend]
-          service: [frontend, task-service]
+        service: [auth, task, team, api-gateway, notification, realtime, frontend]
 
     steps:
       - name: Checkout repository
