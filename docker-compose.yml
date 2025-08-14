@@ -1,175 +1,76 @@
+name: todo-dev
+# include services that are implemented
 services:
-  # Load Balancer
-  load-balancer:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - api-gateway-1
-      - api-gateway-2
-      - frontend-1
-      - frontend-2
-    networks:
-      - app-network
-
-  # API Gateway (2 Instances)
-  api-gateway-1:
-    build: ./api-gateway
-    ports:
-      - "8081:8080"
-    networks:
-      - app-network
-
-  api-gateway-2:
-    build: ./api-gateway
-    ports:
-      - "8082:8080"
-    networks:
-      - app-network
-
-  # Frontend App (React, 2 Instances)
-  frontend-1:
-    build: ./frontend
-    ports:
-      - "3001:80" # nginx only listens on 80 by default
-    networks:
-      - app-network
-
-  frontend-2:
-    build: ./frontend
-    ports:
-      - "3002:80"
-    networks:
-      - app-network
-
-  # Authentication Service (2 Instances)
-  auth-service-1:
-    build: ./auth
-    environment:
-      - DB_HOST=auth-db
-      - DB_NAME=auth
-      - DB_USER=root
-      - DB_PASS=root
-    depends_on:
-      - auth-db
-    networks:
-      - app-network
-
-  auth-service-2:
-    build: ./auth
-    environment:
-      - DB_HOST=auth-db
-      - DB_NAME=auth
-      - DB_USER=root
-      - DB_PASS=root
-    depends_on:
-      - auth-db
-    networks:
-      - app-network
-
-  auth-db:
-    image: mysql:8
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: auth
-    networks:
-      - app-network
-
-  # Team Service (2 Instances)
-  team-service-1:
-    build: ./team
-    environment:
-      - DB_HOST=team-db
-      - DB_NAME=team
-      - DB_USER=root
-      - DB_PASS=root
-    depends_on:
-      - team-db
-    networks:
-      - app-network
-
-  team-service-2:
-    build: ./team
-    environment:
-      - DB_HOST=team-db
-      - DB_NAME=team
-      - DB_USER=root
-      - DB_PASS=root
-    depends_on:
-      - team-db
-    networks:
-      - app-network
-
-  team-db:
-    image: mysql:8
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: team
-    networks:
-      - app-network
-
-  # Task Service (2 Instances)
-  task-service-1:
-    build: ./task
-    environment:
-      - DB_HOST=task-db
-      - DB_NAME=task
-      - DB_USER=root
-      - DB_PASS=root
-    depends_on:
-      - task-db
-    networks:
-      - app-network
-
-  task-service-2:
-    build: ./task
-    environment:
-      - DB_HOST=task-db
-      - DB_NAME=task
-      - DB_USER=root
-      - DB_PASS=root
-    depends_on:
-      - task-db
-    networks:
-      - app-network
-
   task-db:
-    image: mysql:8
-    restart: always
+    image: mysql:8.0
+    container_name: task_mysql
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: task
-    networks:
-      - app-network
-
-  # Realtime Service
-  realtime-service:
-    build: ./realtime
-    depends_on:
-      - redis
-    networks:
-      - app-network
-
-  # Notification Service
-  notification-service:
-    build: ./notification
-    depends_on:
-      - redis
-    networks:
-      - app-network
-
-  # Redis for Pub/Sub and Stream
-  redis:
-    image: redis:7
+      MYSQL_ROOT_PASSWORD: pass
+      MYSQL_DATABASE: tasksdb
     ports:
-      - "6379:6379"
-    networks:
-      - app-network
+      - "3306:3306"
+    # volumes:
+    #   - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-ppass"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    networks: [app-net]
+
+  # migration（dbmate） after sucess run, exit
+  dbmate:
+    image: amacneil/dbmate:latest
+    container_name: task_dbmate
+    depends_on:
+      task-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "mysql://root:pass@task-db:3306/tasksdb?parseTime=true&loc=UTC&charset=utf8mb4"
+    volumes:
+      - ./task/migrations:/db/migrations:ro
+    command: ["up"]
+    restart: "no"
+    networks: [app-net]
+
+  task-service:
+    build:
+      context: ./task
+      dockerfile: ./Dockerfile
+    depends_on:
+      task-db:
+        condition: service_healthy
+      dbmate:
+        condition: service_completed_successfully
+    environment:
+      PORT: "8081"
+      DB_HOST: "task-db"
+      DB_PORT: "3306"
+      DB_USER: "root"
+      DB_PASS: "pass"
+      DB_NAME: "tasksdb"
+      # if use DATABASE_URL，then add this：
+      # DATABASE_URL: "mysql://root:pass@mysql:3306/tasksdb?parseTime=true&loc=UTC&charset=utf8mb4"
+    ports:
+      - "8081:8081"
+    networks: [app-net]
+
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: task_phpmyadmin
+    depends_on:
+      task-db:
+        condition: service_healthy
+    environment:
+      PMA_HOST: task-db      
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: pass
+      UPLOAD_LIMIT: 64M      
+    ports:
+      - "8082:80"              
+    networks: [app-net]
 
 networks:
-  app-network:
-    driver: bridge
+  app-net:
