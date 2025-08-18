@@ -1,0 +1,53 @@
+version: '3.8'
+services:
+  team-db:
+    image: mysql:8.0
+    container_name: team_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: pass
+      MYSQL_DATABASE: todolist
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-ppass"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    networks: [app-net]
+
+  team-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      team-db:
+        condition: service_healthy
+    environment:
+      PORT: "8083"
+      DB_HOST: "team-db"
+      DB_PORT: "3306"
+      DB_USER: "root"
+      DB_PASS: "pass"
+      DB_NAME: "todolist"
+    ports:
+      - "8083:8083"
+    networks: [app-net]
+
+  team-phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: team_phpmyadmin
+    depends_on:
+      team-db:
+        condition: service_healthy
+    environment:
+      PMA_HOST: team-db      
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: pass
+      UPLOAD_LIMIT: 64M      
+    ports:
+      - "8084:80"              
+    networks: [app-net]
+
+networks:
+  app-net:

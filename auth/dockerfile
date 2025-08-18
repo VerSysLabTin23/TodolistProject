@@ -1,19 +1,31 @@
-FROM golang:1.24.2-alpine
+FROM golang:1.21-alpine AS builder
 
 WORKDIR /app
 
-# Install git so Go modules can download dependencies
-RUN apk add --no-cache git
+# Copy go mod files
+COPY go.mod go.sum ./
 
-# Copy and download dependencies
-COPY go.mod ./
+# Download dependencies
 RUN go mod download
 
-# Copy the rest of the source code
+# Copy source code
 COPY . .
 
-# Build the Go app
-RUN go build -o api-gateway
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o auth-service .
+
+# Final stage
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /root/
+
+# Copy the binary from builder stage
+COPY --from=builder /app/auth-service .
+
+# Expose port
+EXPOSE 8084
 
 # Run the binary
-CMD ["./api-gateway"]
+CMD ["./auth-service"]

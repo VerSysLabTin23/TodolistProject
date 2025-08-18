@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"net/http"
 	"os"
 
 	"github.com/gin-gonic/gin"
@@ -28,16 +27,30 @@ func main() {
 
 	// --- wire repos/handlers ---
 	repo := NewTaskRepository(gdb)
-	h := NewTaskHandlers(repo)
+	teamClient := NewTeamClient()
+	h := NewTaskHandlers(repo, teamClient)
 
 	// --- router ---
 	r := gin.Default()
-	r.GET("/healthz", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
-	r.GET("/tasks", h.ListTasks)
-	r.POST("/tasks", h.CreateTask)
+
+	// Health check
+	r.GET("/healthz", h.HealthCheck)
+
+	// Team-scoped task collection (recommended)
+	r.GET("/teams/:teamId/tasks", h.ListTasksByTeam)
+	r.POST("/teams/:teamId/tasks", h.CreateTaskInTeam)
+
+	// Cross-team collection (optional convenience)
+	r.GET("/tasks", h.ListTasksAcrossTeams)
+
+	// Single task operations
 	r.GET("/tasks/:id", h.GetTask)
 	r.PUT("/tasks/:id", h.UpdateTask)
 	r.DELETE("/tasks/:id", h.DeleteTask)
+
+	// Handy sub-resources
+	r.PUT("/tasks/:id/assignee", h.SetAssignee)
+	r.POST("/tasks/:id/complete", h.UpdateCompletion)
 
 	log.Printf("task-service listening on :%s", port)
 	if err := r.Run(":" + port); err != nil {
