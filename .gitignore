@@ -12,6 +12,9 @@ go.work
 bin/
 dist/
 build/
+**/bin/
+**/dist/
+**/build/
 
 # Go module files (keep go.mod and go.sum)
 # go.mod
@@ -23,17 +26,26 @@ vendor/
 # Go workspace file
 go.work
 
-# Binary files
+# Binary files (Go build outputs)
 auth-service
 team-service
 task-service
 api-gateway
 notification-service
 realtime-service
+**/auth-service
+**/team-service
+**/task-service
+**/api-gateway
+**/notification-service
+**/realtime-service
 
 # Docker
 .dockerignore
 docker-compose.override.yml
+docker-compose.*.yml
+!docker-compose.yml
+!docker-compose.yml.example
 
 # Environment files
 .env
