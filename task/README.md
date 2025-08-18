@@ -201,9 +201,4 @@ Foreign key constraints will be added when dependent services are available.
 - Rate limiting
 - Metrics and monitoring
 - WebSocket support
-- Task templates
-- File attachments
 
-## License
-
-MIT License - see LICENSE file for details.

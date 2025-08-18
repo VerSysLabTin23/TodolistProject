@@ -32,8 +32,9 @@ func main() {
 
 	// Wire repositories, handlers, and middleware
 	repo := NewTeamRepository(gdb)
+	authClient := NewAuthClient()
 	h := NewTeamHandlers(repo)
-	auth := NewAuthMiddleware(repo)
+	auth := NewAuthMiddleware(repo, authClient)
 
 	// Setup router
 	r := gin.Default()

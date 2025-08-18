@@ -45,8 +45,23 @@ func (h *TaskHandlers) ListTasksByTeam(c *gin.Context) {
 		return
 	}
 
-	// TODO: Add team membership check here using teamClient.IsUserInTeam()
-	// For now, we'll assume the user has access to the team
+	// Get user ID from JWT context
+	userID, exists := GetUserIDFromContext(c)
+	if !exists {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
+		return
+	}
+
+	// Verify user is member of the team
+	isMember, err := h.teamClient.IsUserInTeam(userID, teamID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team membership"))
+		return
+	}
+	if !isMember {
+		c.JSON(http.StatusForbidden, errResp("FORBIDDEN", "user is not a member of this team"))
+		return
+	}
 
 	ts, err := h.repo.ListTasksByTeam(teamID, filters)
 	if err != nil {
@@ -101,11 +116,23 @@ func (h *TaskHandlers) CreateTaskInTeam(c *gin.Context) {
 		return
 	}
 
-	// TODO: Get creator ID from authenticated user context
-	creatorID := 1 // Placeholder - should come from JWT token
+	// Get creator ID from JWT context
+	creatorID, exists := GetUserIDFromContext(c)
+	if !exists {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
+		return
+	}
 
-	// TODO: Verify user is member of the team using teamClient.IsUserInTeam()
-	// For now, we'll assume the user has access to the team
+	// Verify user is member of the team
+	isMember, err := h.teamClient.IsUserInTeam(creatorID, teamID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team membership"))
+		return
+	}
+	if !isMember {
+		c.JSON(http.StatusForbidden, errResp("FORBIDDEN", "user is not a member of this team"))
+		return
+	}
 
 	t := &Task{
 		TeamID:      teamID,
@@ -134,8 +161,15 @@ func (h *TaskHandlers) ListTasksAcrossTeams(c *gin.Context) {
 		return
 	}
 
-	// TODO: Add user authentication check here
-	// For now, we'll assume the user is authenticated
+	// Get user ID from JWT context (for future team filtering)
+	_, exists := GetUserIDFromContext(c)
+	if !exists {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
+		return
+	}
+
+	// TODO: Filter tasks based on user's team memberships
+	// For now, we'll return all tasks (this should be restricted in production)
 
 	ts, err := h.repo.ListTasksAcrossTeams(filters)
 	if err != nil {
@@ -164,8 +198,23 @@ func (h *TaskHandlers) GetTask(c *gin.Context) {
 		return
 	}
 
-	// TODO: Add team membership check here using teamClient.IsUserInTeam()
-	// For now, we'll assume the user has access to the task
+	// Get user ID from JWT context
+	userID, exists := GetUserIDFromContext(c)
+	if !exists {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
+		return
+	}
+
+	// Verify user is member of the team
+	isMember, err := h.teamClient.IsUserInTeam(userID, t.TeamID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team membership"))
+		return
+	}
+	if !isMember {
+		c.JSON(http.StatusForbidden, errResp("FORBIDDEN", "user is not a member of this team"))
+		return
+	}
 
 	c.JSON(http.StatusOK, mapTask(*t))
 }
@@ -194,9 +243,23 @@ func (h *TaskHandlers) UpdateTask(c *gin.Context) {
 		return
 	}
 
-	// TODO: Add team membership check here using teamClient.IsUserInTeam()
-	// All team members can edit tasks
-	// For now, we'll assume the user has access to the task
+	// Get user ID from JWT context
+	userID, exists := GetUserIDFromContext(c)
+	if !exists {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
+		return
+	}
+
+	// Verify user is member of the team
+	isMember, err := h.teamClient.IsUserInTeam(userID, t.TeamID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team membership"))
+		return
+	}
+	if !isMember {
+		c.JSON(http.StatusForbidden, errResp("FORBIDDEN", "user is not a member of this team"))
+		return
+	}
 
 	// Update fields if provided
 	if req.Title != nil {
@@ -224,7 +287,18 @@ func (h *TaskHandlers) UpdateTask(c *gin.Context) {
 		t.Due = d
 	}
 	if req.AssigneeID != nil {
-		// TODO: Verify assignee is member of the team
+		// Verify assignee is member of the team
+		if *req.AssigneeID != 0 {
+			isAssigneeMember, err := h.teamClient.IsUserInTeam(*req.AssigneeID, t.TeamID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify assignee team membership"))
+				return
+			}
+			if !isAssigneeMember {
+				c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "assignee must be a member of the team"))
+				return
+			}
+		}
 		t.AssigneeID = req.AssigneeID
 	}
 
@@ -254,8 +328,26 @@ func (h *TaskHandlers) DeleteTask(c *gin.Context) {
 		return
 	}
 
-	// TODO: Add permission check here - only team owner and admin can delete tasks
-	// For now, we'll assume the user has permission to delete
+	// Get user ID from JWT context
+	userID, exists := GetUserIDFromContext(c)
+	if !exists {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
+		return
+	}
+
+	// Verify user is member of the team
+	isMember, err := h.teamClient.IsUserInTeam(userID, t.TeamID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team membership"))
+		return
+	}
+	if !isMember {
+		c.JSON(http.StatusForbidden, errResp("FORBIDDEN", "user is not a member of this team"))
+		return
+	}
+
+	// TODO: Add additional permission check - only team owner and admin can delete tasks
+	// For now, all team members can delete tasks
 
 	if err := h.repo.Delete(id); err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", err.Error()))
@@ -279,9 +371,34 @@ func (h *TaskHandlers) SetAssignee(c *gin.Context) {
 		return
 	}
 
-	// TODO: Add team membership check here using teamClient.IsUserInTeam()
-	// All team members can assign tasks
-	// For now, we'll assume the user has access to the task
+	// Get user ID from JWT context
+	userID, exists := GetUserIDFromContext(c)
+	if !exists {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
+		return
+	}
+
+	// Get task to verify team membership
+	task, err := h.repo.GetByID(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", err.Error()))
+		return
+	}
+	if task == nil {
+		c.JSON(http.StatusNotFound, errResp("NOT_FOUND", "Task not found"))
+		return
+	}
+
+	// Verify user is member of the team
+	isMember, err := h.teamClient.IsUserInTeam(userID, task.TeamID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team membership"))
+		return
+	}
+	if !isMember {
+		c.JSON(http.StatusForbidden, errResp("FORBIDDEN", "user is not a member of this team"))
+		return
+	}
 
 	if err := h.repo.UpdateAssignee(id, req.AssigneeID); err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", err.Error()))
@@ -318,9 +435,34 @@ func (h *TaskHandlers) UpdateCompletion(c *gin.Context) {
 		return
 	}
 
-	// TODO: Add team membership check here using teamClient.IsUserInTeam()
-	// All team members can update task completion
-	// For now, we'll assume the user has access to the task
+	// Get user ID from JWT context
+	userID, exists := GetUserIDFromContext(c)
+	if !exists {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
+		return
+	}
+
+	// Get task to verify team membership
+	task, err := h.repo.GetByID(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", err.Error()))
+		return
+	}
+	if task == nil {
+		c.JSON(http.StatusNotFound, errResp("NOT_FOUND", "Task not found"))
+		return
+	}
+
+	// Verify user is member of the team
+	isMember, err := h.teamClient.IsUserInTeam(userID, task.TeamID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team membership"))
+		return
+	}
+	if !isMember {
+		c.JSON(http.StatusForbidden, errResp("FORBIDDEN", "user is not a member of this team"))
+		return
+	}
 
 	if err := h.repo.UpdateCompletion(id, req.Completed); err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", err.Error()))

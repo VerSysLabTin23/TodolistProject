@@ -28,7 +28,9 @@ func main() {
 	// --- wire repos/handlers ---
 	repo := NewTaskRepository(gdb)
 	teamClient := NewTeamClient()
+	authClient := NewAuthClient()
 	h := NewTaskHandlers(repo, teamClient)
+	auth := NewAuthMiddleware(authClient)
 
 	// --- router ---
 	r := gin.Default()
@@ -36,21 +38,21 @@ func main() {
 	// Health check
 	r.GET("/healthz", h.HealthCheck)
 
-	// Team-scoped task collection (recommended)
-	r.GET("/teams/:teamId/tasks", h.ListTasksByTeam)
-	r.POST("/teams/:teamId/tasks", h.CreateTaskInTeam)
+	// Team-scoped task collection (recommended) - requires authentication
+	r.GET("/teams/:teamId/tasks", auth.RequireAuth(), h.ListTasksByTeam)
+	r.POST("/teams/:teamId/tasks", auth.RequireAuth(), h.CreateTaskInTeam)
 
-	// Cross-team collection (optional convenience)
-	r.GET("/tasks", h.ListTasksAcrossTeams)
+	// Cross-team collection (optional convenience) - requires authentication
+	r.GET("/tasks", auth.RequireAuth(), h.ListTasksAcrossTeams)
 
-	// Single task operations
-	r.GET("/tasks/:id", h.GetTask)
-	r.PUT("/tasks/:id", h.UpdateTask)
-	r.DELETE("/tasks/:id", h.DeleteTask)
+	// Single task operations - requires authentication
+	r.GET("/tasks/:id", auth.RequireAuth(), h.GetTask)
+	r.PUT("/tasks/:id", auth.RequireAuth(), h.UpdateTask)
+	r.DELETE("/tasks/:id", auth.RequireAuth(), h.DeleteTask)
 
-	// Handy sub-resources
-	r.PUT("/tasks/:id/assignee", h.SetAssignee)
-	r.POST("/tasks/:id/complete", h.UpdateCompletion)
+	// Handy sub-resources - requires authentication
+	r.PUT("/tasks/:id/assignee", auth.RequireAuth(), h.SetAssignee)
+	r.POST("/tasks/:id/complete", auth.RequireAuth(), h.UpdateCompletion)
 
 	log.Printf("task-service listening on :%s", port)
 	if err := r.Run(":" + port); err != nil {

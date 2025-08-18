@@ -8,19 +8,35 @@ import (
 
 // AuthMiddleware handles authentication and authorization
 type AuthMiddleware struct {
-	repo TeamRepository
+	repo       TeamRepository
+	authClient *AuthClient
 }
 
 // NewAuthMiddleware creates a new auth middleware
-func NewAuthMiddleware(repo TeamRepository) *AuthMiddleware {
-	return &AuthMiddleware{repo: repo}
+func NewAuthMiddleware(repo TeamRepository, authClient *AuthClient) *AuthMiddleware {
+	return &AuthMiddleware{
+		repo:       repo,
+		authClient: authClient,
+	}
 }
 
 // RequireTeamMembership ensures user is a member of the team
 func (am *AuthMiddleware) RequireTeamMembership() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// TODO: Extract user ID from JWT token
-		userID := 1 // Placeholder - should come from JWT token
+		// Extract user ID from JWT context
+		userID, exists := c.Get("userID")
+		if !exists {
+			c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
+			c.Abort()
+			return
+		}
+
+		userIDInt, ok := userID.(int)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "invalid user ID type"))
+			c.Abort()
+			return
+		}
 
 		teamID, err := parseID(c.Param("id"))
 		if err != nil {
@@ -30,7 +46,7 @@ func (am *AuthMiddleware) RequireTeamMembership() gin.HandlerFunc {
 		}
 
 		// Check if user is member of the team
-		isMember, err := am.repo.IsUserInTeam(userID, teamID)
+		isMember, err := am.repo.IsUserInTeam(userIDInt, teamID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to check team membership"))
 			c.Abort()
@@ -53,8 +69,20 @@ func (am *AuthMiddleware) RequireTeamMembership() gin.HandlerFunc {
 // RequireTeamOwner ensures user is the owner of the team
 func (am *AuthMiddleware) RequireTeamOwner() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// TODO: Extract user ID from JWT token
-		userID := 1 // Placeholder - should come from JWT token
+		// Extract user ID from JWT context
+		userID, exists := c.Get("userID")
+		if !exists {
+			c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
+			c.Abort()
+			return
+		}
+
+		userIDInt, ok := userID.(int)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "invalid user ID type"))
+			c.Abort()
+			return
+		}
 
 		teamID, err := parseID(c.Param("id"))
 		if err != nil {
@@ -64,7 +92,7 @@ func (am *AuthMiddleware) RequireTeamOwner() gin.HandlerFunc {
 		}
 
 		// Check if user is owner of the team
-		role, err := am.repo.GetUserRoleInTeam(userID, teamID)
+		role, err := am.repo.GetUserRoleInTeam(userIDInt, teamID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to check user role"))
 			c.Abort()
@@ -87,8 +115,20 @@ func (am *AuthMiddleware) RequireTeamOwner() gin.HandlerFunc {
 // RequireTeamAdmin ensures user is owner or admin of the team
 func (am *AuthMiddleware) RequireTeamAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// TODO: Extract user ID from JWT token
-		userID := 1 // Placeholder - should come from JWT token
+		// Extract user ID from JWT context
+		userID, exists := c.Get("userID")
+		if !exists {
+			c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
+			c.Abort()
+			return
+		}
+
+		userIDInt, ok := userID.(int)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "invalid user ID type"))
+			c.Abort()
+			return
+		}
 
 		teamID, err := parseID(c.Param("id"))
 		if err != nil {
@@ -98,7 +138,7 @@ func (am *AuthMiddleware) RequireTeamAdmin() gin.HandlerFunc {
 		}
 
 		// Check if user is owner or admin of the team
-		role, err := am.repo.GetUserRoleInTeam(userID, teamID)
+		role, err := am.repo.GetUserRoleInTeam(userIDInt, teamID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to check user role"))
 			c.Abort()

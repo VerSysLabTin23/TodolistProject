@@ -187,6 +187,3 @@ This service depends on:
 - Team templates
 - Team activity log
 
-## License
-
-MIT License - see LICENSE file for details.
