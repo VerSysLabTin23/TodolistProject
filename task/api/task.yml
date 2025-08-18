@@ -1,13 +1,17 @@
-# https://editor.swagger.io/
 openapi: 3.0.0
 info:
   title: Task Service API
-  version: 1.0.0
-  description: REST API for managing tasks. By default sort by priority then due time.
-
+  version: 1.1.0
+  description: >
+    REST API for managing tasks within teams (lightweight "Tagger" style).
+    - Tasks belong to a team and have creator/assignee relations.
+    - Default sorting: priority (high→low), then due date (earliest first).
 servers:
   - url: http://localhost:8081
     description: Local development server
+
+security:
+  - bearerAuth: []
 
 paths:
   /healthz:
@@ -17,10 +21,70 @@ paths:
         '200':
           description: OK
 
+  # ---------- Team-scoped task collection (recommended) ----------
+  /teams/{teamId}/tasks:
+    get:
+      summary: List tasks of a team
+      description: Returns tasks in the team, sorted by priority then due date.
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/FilterCompleted'
+        - $ref: '#/components/parameters/FilterPriority'
+        - $ref: '#/components/parameters/FilterAssigneeId'
+        - $ref: '#/components/parameters/Query'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: A list of tasks in the team
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/TeamNotFound' }
+
+    post:
+      summary: Create a new task in a team
+      description: >
+        Creates a task under the specified team. The caller must be a member of the team.
+        The creatorId is derived from the authenticated user.
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewTaskInTeam'
+      responses:
+        '201':
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/TeamNotFound' }
+
+  # ---------- Cross-team collection (optional convenience) ----------
   /tasks:
     get:
-      summary: Retrieve all tasks
-      description: Returns all tasks sorted by priority (high→low) then due date (earliest first).
+      summary: Retrieve tasks accessible to the caller (across teams)
+      description: Returns tasks the caller can access, sorted by priority then due date.
+      parameters:
+        - $ref: '#/components/parameters/FilterTeamId'
+        - $ref: '#/components/parameters/FilterCompleted'
+        - $ref: '#/components/parameters/FilterPriority'
+        - $ref: '#/components/parameters/FilterAssigneeId'
+        - $ref: '#/components/parameters/Query'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
           description: A list of tasks
@@ -30,23 +94,9 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Task'
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
-    post:
-      summary: Create a new task
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NewTask'
-      responses:
-        '201':
-          description: Task created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Task'
-
+  # ---------- Single task ----------
   /tasks/{id}:
     get:
       summary: Retrieve a single task
@@ -59,6 +109,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Task'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404':
           description: Task not found
           content:
@@ -67,7 +119,10 @@ paths:
                 $ref: '#/components/schemas/Error'
 
     put:
-      summary: Update a task
+      summary: Update a task (full or partial)
+      description: >
+        Updates mutable fields of the task. The caller must be a team member.
+        Use this for general edits; for quick complete/assignee updates you may prefer the sub-resources below.
       parameters:
         - $ref: '#/components/parameters/TaskId'
       requestBody:
@@ -83,12 +138,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Task'
-        '404':
-          description: Task not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/TaskNotFound' }
 
     delete:
       summary: Delete a task
@@ -97,35 +150,187 @@ paths:
       responses:
         '204':
           description: Deleted
-        '404':
-          description: Task not found
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/TaskNotFound' }
+
+  # ---------- Handy sub-resources ----------
+  /tasks/{id}/assignee:
+    put:
+      summary: Set or clear assignee
+      description: Set `assigneeId` to a team member, or null to unassign.
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAssignee'
+      responses:
+        '200':
+          description: Assignee updated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/schemas/Task'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/TaskNotFound' }
+
+  /tasks/{id}/complete:
+    post:
+      summary: Mark task completed or not
+      description: Toggle completion state quickly.
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [completed]
+              properties:
+                completed:
+                  type: boolean
+                  example: true
+      responses:
+        '200':
+          description: Completion updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/TaskNotFound' }
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   parameters:
     TaskId:
       name: id
       in: path
       required: true
       description: Unique task ID
+      schema: { type: integer, format: int64 }
+    TeamId:
+      name: teamId
+      in: path
+      required: true
+      description: Team ID
+      schema: { type: integer, format: int64 }
+    FilterTeamId:
+      name: teamId
+      in: query
+      required: false
+      description: Filter by team ID (when listing across teams)
+      schema: { type: integer, format: int64 }
+    FilterCompleted:
+      name: completed
+      in: query
+      required: false
+      description: Filter by completion state
+      schema: { type: boolean }
+    FilterPriority:
+      name: priority
+      in: query
+      required: false
+      description: Filter by priority
       schema:
-        type: integer
+        type: string
+        enum: [low, medium, high]
+    FilterAssigneeId:
+      name: assigneeId
+      in: query
+      required: false
+      description: Filter by assignee user ID (null -> unassigned)
+      schema: { type: integer, format: int64 }
+    Query:
+      name: q
+      in: query
+      required: false
+      description: Full-text search over title/description (implementation-dependent)
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Page size (default 50, max 200)
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    Offset:
+      name: offset
+      in: query
+      required: false
+      description: Offset for pagination (default 0)
+      schema: { type: integer, minimum: 0, default: 0 }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid credentials
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          examples:
+            ex:
+              value: { code: "UNAUTHORIZED", message: "Missing/invalid token" }
+    Forbidden:
+      description: Caller is not a member of the team or lacks permission
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          examples:
+            ex:
+              value: { code: "FORBIDDEN", message: "Not a team member" }
+    TeamNotFound:
+      description: Team not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          examples:
+            ex:
+              value: { code: "TEAM_NOT_FOUND", message: "Team 12 does not exist" }
+    TaskNotFound:
+      description: Task not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          examples:
+            ex:
+              value: { code: "NOT_FOUND", message: "Task not found" }
+    BadRequest:
+      description: Invalid input
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          examples:
+            ex:
+              value: { code: "BAD_REQUEST", message: "due must be a valid date (YYYY-MM-DD)" }
 
   schemas:
     Task:
       type: object
-      required: [id, title, completed, priority, due, createdAt, updatedAt]
+      required:
+        [id, teamId, creatorId, title, completed, priority, due, createdAt, updatedAt]
       properties:
-        id: { type: integer, example: 1 }
-        title: { type: string, example: "Design API documentation" }
+        id:         { type: integer, format: int64, example: 1 }
+        teamId:     { type: integer, format: int64, example: 12 }
+        creatorId:  { type: integer, format: int64, example: 3, description: "User who created the task" }
+        assigneeId: { type: integer, format: int64, nullable: true, example: 5 }
+        title:      { type: string, example: "Design API documentation" }
         description:
           type: string
           nullable: true
           example: "Write OpenAPI spec for task service"
-        completed: { type: boolean, example: false }
+        completed:  { type: boolean, example: false }
         priority:
           type: string
           enum: ["low","medium","high"]
@@ -134,18 +339,15 @@ components:
           type: string
           format: date
           example: "2025-08-20"
-        createdAt: { type: string, format: date-time, example: "2025-08-10T09:30:00Z" }
-        updatedAt: { type: string, format: date-time, example: "2025-08-10T09:45:00Z" }
+        createdAt:  { type: string, format: date-time, example: "2025-08-10T09:30:00Z" }
+        updatedAt:  { type: string, format: date-time, example: "2025-08-10T09:45:00Z" }
 
-    NewTask:
+    NewTaskInTeam:
       type: object
       required: [title, priority, due]
       properties:
         title: { type: string, example: "Design API documentation" }
-        description:
-          type: string
-          nullable: true
-        completed: { type: boolean, default: false }
+        description: { type: string, nullable: true }
         priority:
           type: string
           enum: ["low","medium","high"]
@@ -154,21 +356,40 @@ components:
           type: string
           format: date
           example: "2025-08-20"
+        assigneeId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Assign to a team member (optional)
 
     UpdateTask:
       type: object
+      description: Fields that can be updated by PUT (full or partial update).
       properties:
         title: { type: string }
-        description:
-          type: string
-          nullable: true
+        description: { type: string, nullable: true }
         completed: { type: boolean }
-        priority:
-          type: string
-          enum: ["low","medium","high"]
-        due:
-          type: string
-          format: date
+        priority: { type: string, enum: ["low","medium","high"] }
+        due: { type: string, format: date }
+        assigneeId:
+          type: integer
+          format: int64
+          nullable: true
+      example:
+        title: "Refine API doc"
+        priority: "high"
+        due: "2025-08-22"
+        assigneeId: 5
+
+    SetAssignee:
+      type: object
+      required: [assigneeId]
+      properties:
+        assigneeId:
+          type: integer
+          format: int64
+          nullable: true
+          example: 5
 
     Error:
       type: object
