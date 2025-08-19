@@ -9,8 +9,6 @@ services:
       MYSQL_DATABASE: tasksdb
     ports:
       - "3306:3306"
-    # volumes:
-    #   - mysql-data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-ppass"]
       interval: 5s
@@ -18,13 +16,67 @@ services:
       retries: 15
     networks: [app-net]
 
-  # migration（dbmate） after sucess run, exit
+  team-db:
+    image: mysql:8.0
+    container_name: team_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: pass
+      MYSQL_DATABASE: teamsdb
+    ports:
+      - "3307:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-ppass"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    networks: [app-net]
+
+  # Team service migration
+  team-dbmate:
+    image: amacneil/dbmate:latest
+    container_name: team_dbmate
+    depends_on:
+      team-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "mysql://root:pass@team-db:3306/teamsdb?parseTime=true&loc=UTC&charset=utf8mb4"
+    volumes:
+      - ./team/migrations:/db/migrations:ro
+    command: ["up"]
+    restart: "no"
+    networks: [app-net]
+
+  # Team service
+  team-service:
+    build:
+      context: ./team
+      dockerfile: ./Dockerfile
+    depends_on:
+      team-db:
+        condition: service_healthy
+      team-dbmate:
+        condition: service_completed_successfully
+    environment:
+      PORT: "8083"
+      DB_HOST: "team-db"
+      DB_PORT: "3306"
+      DB_USER: "root"
+      DB_PASS: "pass"
+      DB_NAME: "teamsdb"
+      AUTH_SERVICE_URL: "http://auth-service:8084"
+    ports:
+      - "8083:8083"
+    networks: [app-net]
+
+  # Task service migration (runs after team service is ready)
   dbmate:
     image: amacneil/dbmate:latest
     container_name: task_dbmate
     depends_on:
       task-db:
         condition: service_healthy
+      team-service:
+        condition: service_started
     environment:
       DATABASE_URL: "mysql://root:pass@task-db:3306/tasksdb?parseTime=true&loc=UTC&charset=utf8mb4"
     volumes:
@@ -33,6 +85,7 @@ services:
     restart: "no"
     networks: [app-net]
 
+  # Task service
   task-service:
     build:
       context: ./task
@@ -40,6 +93,10 @@ services:
     depends_on:
       task-db:
         condition: service_healthy
+      team-service: # Depends on team-service for API calls
+        condition: service_started
+      auth-service: # Depends on auth-service for user validation
+        condition: service_started
       dbmate:
         condition: service_completed_successfully
     environment:
@@ -49,14 +106,14 @@ services:
       DB_USER: "root"
       DB_PASS: "pass"
       DB_NAME: "tasksdb"
-      # if use DATABASE_URL，then add this：
-      # DATABASE_URL: "mysql://root:pass@mysql:3306/tasksdb?parseTime=true&loc=UTC&charset=utf8mb4"
+      TEAM_SERVICE_URL: "http://team-service:8083"
+      AUTH_SERVICE_URL: "http://auth-service:8084"
     ports:
       - "8081:8081"
     networks: [app-net]
 
-
-  phpmyadmin:
+  # Task phpMyAdmin
+  task-phpmyadmin:
     image: phpmyadmin:latest
     container_name: task_phpmyadmin
     depends_on:
@@ -70,6 +127,91 @@ services:
       UPLOAD_LIMIT: 64M      
     ports:
       - "8082:80"              
+    networks: [app-net]
+
+  # Team phpMyAdmin
+  team-phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: team_phpmyadmin
+    depends_on:
+      team-db:
+        condition: service_healthy
+    environment:
+      PMA_HOST: team-db
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: pass
+      UPLOAD_LIMIT: 64M
+    ports:
+      - "8084:80"
+    networks: [app-net]
+
+  auth-db:
+    image: mysql:8.0
+    container_name: auth_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: pass
+      MYSQL_DATABASE: authdb
+    ports:
+      - "3309:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-ppass"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    networks: [app-net]
+
+  auth-dbmate:
+    image: amacneil/dbmate:latest
+    container_name: auth_dbmate
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "mysql://root:pass@auth-db:3306/authdb?parseTime=true&loc=UTC&charset=utf8mb4"
+    volumes:
+      - ./auth/migrations:/db/migrations:ro
+    command: ["up"]
+    restart: "no"
+    networks: [app-net]
+
+  auth-service:
+    build:
+      context: ./auth
+      dockerfile: ./Dockerfile
+    depends_on:
+      auth-db:
+        condition: service_healthy
+      auth-dbmate:
+        condition: service_completed_successfully
+    environment:
+      PORT: "8084"
+      DB_HOST: "auth-db"
+      DB_PORT: "3306"
+      DB_USER: "root"
+      DB_PASS: "pass"
+      DB_NAME: "authdb"
+      JWT_SECRET: "your-secret-key-change-in-production"
+      JWT_ACCESS_TTL: "15m"
+      JWT_REFRESH_TTL: "168h"
+    ports:
+      - "8084:8084"
+    networks: [app-net]
+
+  auth-phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: auth_phpmyadmin
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    environment:
+      PMA_HOST: auth-db
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: pass
+      UPLOAD_LIMIT: 64M
+    ports:
+      - "8085:80"
     networks: [app-net]
 
 networks:

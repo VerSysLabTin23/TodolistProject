@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  auth-db:
+    image: mysql:8.0
+    container_name: auth_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: pass
+      MYSQL_DATABASE: authdb
+    ports:
+      - "3308:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-ppass"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    networks: [app-net]
+
+  auth-dbmate:
+    image: amacneil/dbmate:latest
+    container_name: auth_dbmate
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "mysql://root:pass@auth-db:3306/authdb?parseTime=true&loc=UTC&charset=utf8mb4"
+    volumes:
+      - ./migrations:/db/migrations:ro
+    command: ["up"]
+    restart: "no"
+    networks: [app-net]
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    depends_on:
+      auth-db:
+        condition: service_healthy
+      auth-dbmate:
+        condition: service_completed_successfully
+    environment:
+      PORT: "8084"
+      DB_HOST: "auth-db"
+      DB_PORT: "3306"
+      DB_USER: "root"
+      DB_PASS: "pass"
+      DB_NAME: "authdb"
+      JWT_SECRET: "your-secret-key-change-in-production"
+      JWT_ACCESS_TTL: "15m"
+      JWT_REFRESH_TTL: "168h"
+    ports:
+      - "8084:8084"
+    networks: [app-net]
+
+  auth-phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: auth_phpmyadmin
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    environment:
+      PMA_HOST: auth-db
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: pass
+      UPLOAD_LIMIT: 64M
+    ports:
+      - "8085:80"
+    networks: [app-net]
+
+networks:
+  app-net:
+    driver: bridge

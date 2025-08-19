@@ -13,7 +13,7 @@ RUN go mod download
 COPY . .
 
 # Build the Go app
-RUN go build -o api-gateway
+RUN go build -o team-service
 
 # Run the binary
-CMD ["./api-gateway"]
+CMD ["./team-service"]
