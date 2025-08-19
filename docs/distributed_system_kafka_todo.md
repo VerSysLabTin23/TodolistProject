@@ -18,9 +18,9 @@ streaming capabilities.
 
 ## 2. Project Scope
 
--   Build on the existing ToDo application from the lab.\
--   Integrate Kafka as the event streaming backbone.\
--   Record and expose task history as a persistent log of all changes.\
+-   Build on the existing ToDo application from the lab.
+-   Integrate Kafka as the event streaming backbone.
+-   Record and expose task history as a persistent log of all changes.
 -   *(Optional, if time allows)* add realtime updates via WebSocket for
     live collaboration.
 
@@ -32,10 +32,10 @@ We will demonstrate the system with **two users (Alice and Bob)**
 working in the same team **"Distributed System"**:
 
 1.  **Alice creates tasks** ("Frontend", "Documentation", "Unit tests")
-    →\
+    →
     Bob's UI shows the tasks **immediately** (with realtime) or after a
     **REST refresh** (minimum).
-2.  **Bob updates a task** (status: incomplete → complete) →\
+2.  **Bob updates a task** (status: incomplete → complete) →
     Alice's UI sees the update **immediately** (with realtime) or via
     **REST** (minimum).
 3.  **History view**: Both Alice and Bob can open the history page and
@@ -80,43 +80,43 @@ working in the same team **"Distributed System"**:
 
 ### Minimum Version (Kafka + History only)
 
-**Flow: Task Creation** 1. User creates tasks.\
+**Flow: Task Creation** 1. User creates tasks.
 2. Application inserts into database and publishes `task.created`
-events.\
+events.
 3. History functionality consumes events and writes them into the event
-log.\
-4. Other users refresh the task list and see the new tasks.\
+log.
+4. Other users refresh the task list and see the new tasks.
 5. History page shows the list of created tasks in order.
 
-**Flow: Task Update** 1. User updates a task (e.g. status → "done").\
+**Flow: Task Update** 1. User updates a task (e.g. status → "done").
 2. Application updates the database and publishes a `task.updated`
-event.\
-3. History functionality logs the update.\
-4. Other users refresh and see the updated task.\
+event.
+3. History functionality logs the update.
+4. Other users refresh and see the updated task.
 5. History page shows the update in the team timeline.
 
 ------------------------------------------------------------------------
 
 ### Nice-to-Have Version (Kafka + History + Realtime)
 
-**Flow: Task Creation** 1. User creates tasks.\
-2. Application publishes `task.created` events.\
+**Flow: Task Creation** 1. User creates tasks.
+2. Application publishes `task.created` events.
 3. Realtime functionality consumes events and pushes them to connected
-clients.\
-4. Other users' UIs update instantly.\
+clients.
+4. Other users' UIs update instantly.
 5. History functionality logs the same events.
 
-**Flow: Task Update** 1. User marks a task complete.\
-2. Application publishes `task.updated`.\
-3. Realtime functionality pushes the update instantly to other users.\
-4. Their UIs update without reload.\
+**Flow: Task Update** 1. User marks a task complete.
+2. Application publishes `task.updated`.
+3. Realtime functionality pushes the update instantly to other users.
+4. Their UIs update without reload.
 5. History shows the change in the team timeline.
 
 ------------------------------------------------------------------------
 
 ## 6. APIs
 
-**History** - `GET /teams/{teamId}/history` → team-level timeline.\
+**History** - `GET /teams/{teamId}/history` → team-level timeline.
 - `GET /tasks/{taskId}/history` → per-task timeline.
 
 **Realtime (optional)** - `GET /ws?teamId=team-DS` → WebSocket
@@ -126,19 +126,19 @@ connection, authenticated with JWT.
 
 ## 7. Tasks (1 week)
 
--   **1**: Extend the application to publish Kafka events.\
--   **2**: Implement event log storage and history API.\
--   **3**: Integrate frontend with history view.\
--   **4**: *(Optional)* add realtime updates with WebSocket.\
+-   **1**: Extend the application to publish Kafka events.
+-   **2**: Implement event log storage and history API.
+-   **3**: Integrate frontend with history view.
+-   **4**: *(Optional)* add realtime updates with WebSocket.
 -   **5**: Prepare the presentation and the demo.
 
 ------------------------------------------------------------------------
 
 ## 7. Acceptance Criteria
 
--   Application publishes task events to Kafka.\
--   History is correctly persisted and accessible through APIs.\
--   Frontend can display task lists and history.\
--   Demo works with two users (Alice & Bob) collaborating in one team.\
+-   Application publishes task events to Kafka.
+-   History is correctly persisted and accessible through APIs.
+-   Frontend can display task lists and history.
+-   Demo works with two users (Alice & Bob) collaborating in one team.
 -   *(Optional)* Realtime updates work if WebSocket functionality is
     ready.
