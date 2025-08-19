@@ -67,10 +67,10 @@ working in the same team **"Distributed System"**:
 ### Components
 
 -   **Existing ToDo Application** → produces events and manages current
-    state.\
--   **Kafka** → acts as the middleware backbone for event streaming.\
+    state.
+-   **Kafka** → acts as the middleware backbone for event streaming.
 -   **History Functionality** → consumes events, persists them, and
-    provides history APIs.\
+    provides history APIs.
 -   **(Optional) Realtime Functionality** → consumes events and pushes
     updates to the UI.
 
@@ -80,7 +80,8 @@ working in the same team **"Distributed System"**:
 
 ### Minimum Version (Kafka + History only)
 
-**Flow: Task Creation** 1. User creates tasks.
+**Flow: Task Creation** 
+1. User creates tasks.
 2. Application inserts into database and publishes `task.created`
 events.
 3. History functionality consumes events and writes them into the event
