@@ -12,8 +12,8 @@ RUN go mod download
 # Copy the rest of the source code
 COPY . .
 
-# Build the Go app
-RUN go build -o task-api
+# Build the Go app (new standard layout)
+RUN go build -o task-service ./cmd/task-service
 
 # Run the binary
-CMD ["./task-api"]
+CMD ["./task-service"]

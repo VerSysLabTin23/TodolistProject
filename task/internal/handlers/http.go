@@ -1,17 +1,22 @@
-package main
+package handlers
 
 import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/VerSysLabTin23/TodolistProject/task/internal/clients"
+	"github.com/VerSysLabTin23/TodolistProject/task/internal/middleware"
+	"github.com/VerSysLabTin23/TodolistProject/task/internal/models"
+	"github.com/VerSysLabTin23/TodolistProject/task/internal/repository"
 )
 
 type TaskHandlers struct {
-	repo       TaskRepository
-	teamClient *TeamClient
+	repo       repository.TaskRepository
+	teamClient *clients.TeamClient
 }
 
-func NewTaskHandlers(r TaskRepository, tc *TeamClient) *TaskHandlers {
+func NewTaskHandlers(r repository.TaskRepository, tc *clients.TeamClient) *TaskHandlers {
 	return &TaskHandlers{repo: r, teamClient: tc}
 }
 
@@ -22,7 +27,7 @@ func (h *TaskHandlers) HealthCheck(c *gin.Context) {
 
 // ListTasksByTeam returns tasks in a specific team
 func (h *TaskHandlers) ListTasksByTeam(c *gin.Context) {
-	teamID, err := parseID(c.Param("teamId"))
+	teamID, err := models.ParseID(c.Param("teamId"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "invalid team id"))
 		return
@@ -39,14 +44,14 @@ func (h *TaskHandlers) ListTasksByTeam(c *gin.Context) {
 		return
 	}
 
-	var filters TaskFilters
+	var filters models.TaskFilters
 	if err := c.ShouldBindQuery(&filters); err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "invalid query parameters"))
 		return
 	}
 
 	// Get user ID from JWT context
-	userID, exists := GetUserIDFromContext(c)
+	userID, exists := middleware.GetUserIDFromContext(c)
 	if !exists {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
 		return
@@ -69,12 +74,12 @@ func (h *TaskHandlers) ListTasksByTeam(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, mapTasks(ts))
+	c.JSON(http.StatusOK, models.MapTasks(ts))
 }
 
 // CreateTaskInTeam creates a new task in a specific team
 func (h *TaskHandlers) CreateTaskInTeam(c *gin.Context) {
-	teamID, err := parseID(c.Param("teamId"))
+	teamID, err := models.ParseID(c.Param("teamId"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "invalid team id"))
 		return
@@ -91,7 +96,7 @@ func (h *TaskHandlers) CreateTaskInTeam(c *gin.Context) {
 		return
 	}
 
-	var req NewTaskInTeam
+	var req models.NewTaskInTeam
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "invalid request body"))
 		return
@@ -104,20 +109,20 @@ func (h *TaskHandlers) CreateTaskInTeam(c *gin.Context) {
 	}
 
 	// Validate priority
-	if !validatePriority(req.Priority) {
+	if !models.ValidatePriority(req.Priority) {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "priority must be one of: low, medium, high"))
 		return
 	}
 
 	// Parse due date
-	due, err := parseDateYYYYMMDD(req.Due)
+	due, err := models.ParseDateYYYYMMDD(req.Due)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "due must be a valid date (YYYY-MM-DD)"))
 		return
 	}
 
 	// Get creator ID from JWT context
-	creatorID, exists := GetUserIDFromContext(c)
+	creatorID, exists := middleware.GetUserIDFromContext(c)
 	if !exists {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
 		return
@@ -134,14 +139,14 @@ func (h *TaskHandlers) CreateTaskInTeam(c *gin.Context) {
 		return
 	}
 
-	t := &Task{
+	t := &models.Task{
 		TeamID:      teamID,
 		CreatorID:   creatorID,
 		AssigneeID:  req.AssigneeID,
 		Title:       req.Title,
 		Description: req.Description,
 		Completed:   false,
-		Priority:    Priority(req.Priority),
+		Priority:    models.Priority(req.Priority),
 		Due:         due,
 	}
 
@@ -150,39 +155,50 @@ func (h *TaskHandlers) CreateTaskInTeam(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, mapTask(*t))
+	c.JSON(http.StatusCreated, models.MapTask(*t))
 }
 
-// ListTasksAcrossTeams returns tasks accessible to the caller across teams
+// ListTasksAcrossTeams returns tasks restricted to teams of the current user
 func (h *TaskHandlers) ListTasksAcrossTeams(c *gin.Context) {
-	var filters TaskFilters
+	var filters models.TaskFilters
 	if err := c.ShouldBindQuery(&filters); err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "invalid query parameters"))
 		return
 	}
 
-	// Get user ID from JWT context (for future team filtering)
-	_, exists := GetUserIDFromContext(c)
+	userID, exists := middleware.GetUserIDFromContext(c)
 	if !exists {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
 		return
 	}
 
-	// TODO: Filter tasks based on user's team memberships
-	// For now, we'll return all tasks (this should be restricted in production)
+	teams, err := h.teamClient.GetUserTeams(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to fetch user teams"))
+		return
+	}
+	if len(teams) == 0 {
+		c.JSON(http.StatusOK, []models.TaskResponse{})
+		return
+	}
 
-	ts, err := h.repo.ListTasksAcrossTeams(filters)
+	teamIDs := make([]int, 0, len(teams))
+	for _, t := range teams {
+		teamIDs = append(teamIDs, t.ID)
+	}
+
+	ts, err := h.repo.ListTasksByTeams(teamIDs, filters)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", err.Error()))
 		return
 	}
 
-	c.JSON(http.StatusOK, mapTasks(ts))
+	c.JSON(http.StatusOK, models.MapTasks(ts))
 }
 
 // GetTask retrieves a single task
 func (h *TaskHandlers) GetTask(c *gin.Context) {
-	id, err := parseID(c.Param("id"))
+	id, err := models.ParseID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "invalid task id"))
 		return
@@ -199,7 +215,7 @@ func (h *TaskHandlers) GetTask(c *gin.Context) {
 	}
 
 	// Get user ID from JWT context
-	userID, exists := GetUserIDFromContext(c)
+	userID, exists := middleware.GetUserIDFromContext(c)
 	if !exists {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
 		return
@@ -216,18 +232,18 @@ func (h *TaskHandlers) GetTask(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, mapTask(*t))
+	c.JSON(http.StatusOK, models.MapTask(*t))
 }
 
 // UpdateTask updates a task (full or partial)
 func (h *TaskHandlers) UpdateTask(c *gin.Context) {
-	id, err := parseID(c.Param("id"))
+	id, err := models.ParseID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "invalid task id"))
 		return
 	}
 
-	var req UpdateTask
+	var req models.UpdateTask
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "invalid request body"))
 		return
@@ -244,7 +260,7 @@ func (h *TaskHandlers) UpdateTask(c *gin.Context) {
 	}
 
 	// Get user ID from JWT context
-	userID, exists := GetUserIDFromContext(c)
+	userID, exists := middleware.GetUserIDFromContext(c)
 	if !exists {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
 		return
@@ -272,14 +288,14 @@ func (h *TaskHandlers) UpdateTask(c *gin.Context) {
 		t.Completed = *req.Completed
 	}
 	if req.Priority != nil {
-		if !validatePriority(*req.Priority) {
+		if !models.ValidatePriority(*req.Priority) {
 			c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "priority must be one of: low, medium, high"))
 			return
 		}
-		t.Priority = Priority(*req.Priority)
+		t.Priority = models.Priority(*req.Priority)
 	}
 	if req.Due != nil {
-		d, err := parseDateYYYYMMDD(*req.Due)
+		d, err := models.ParseDateYYYYMMDD(*req.Due)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "due must be a valid date (YYYY-MM-DD)"))
 			return
@@ -307,12 +323,12 @@ func (h *TaskHandlers) UpdateTask(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, mapTask(*t))
+	c.JSON(http.StatusOK, models.MapTask(*t))
 }
 
 // DeleteTask deletes a task
 func (h *TaskHandlers) DeleteTask(c *gin.Context) {
-	id, err := parseID(c.Param("id"))
+	id, err := models.ParseID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "invalid task id"))
 		return
@@ -329,7 +345,7 @@ func (h *TaskHandlers) DeleteTask(c *gin.Context) {
 	}
 
 	// Get user ID from JWT context
-	userID, exists := GetUserIDFromContext(c)
+	userID, exists := middleware.GetUserIDFromContext(c)
 	if !exists {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
 		return
@@ -359,20 +375,20 @@ func (h *TaskHandlers) DeleteTask(c *gin.Context) {
 
 // SetAssignee sets or clears assignee
 func (h *TaskHandlers) SetAssignee(c *gin.Context) {
-	id, err := parseID(c.Param("id"))
+	id, err := models.ParseID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "invalid task id"))
 		return
 	}
 
-	var req SetAssignee
+	var req models.SetAssignee
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "invalid request body"))
 		return
 	}
 
 	// Get user ID from JWT context
-	userID, exists := GetUserIDFromContext(c)
+	userID, exists := middleware.GetUserIDFromContext(c)
 	if !exists {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
 		return
@@ -416,12 +432,12 @@ func (h *TaskHandlers) SetAssignee(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, mapTask(*t))
+	c.JSON(http.StatusOK, models.MapTask(*t))
 }
 
 // UpdateCompletion marks task completed or not
 func (h *TaskHandlers) UpdateCompletion(c *gin.Context) {
-	id, err := parseID(c.Param("id"))
+	id, err := models.ParseID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "invalid task id"))
 		return
@@ -436,7 +452,7 @@ func (h *TaskHandlers) UpdateCompletion(c *gin.Context) {
 	}
 
 	// Get user ID from JWT context
-	userID, exists := GetUserIDFromContext(c)
+	userID, exists := middleware.GetUserIDFromContext(c)
 	if !exists {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
 		return
@@ -480,7 +496,7 @@ func (h *TaskHandlers) UpdateCompletion(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, mapTask(*t))
+	c.JSON(http.StatusOK, models.MapTask(*t))
 }
 
 // --- error helper ---

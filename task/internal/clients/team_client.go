@@ -1,4 +1,4 @@
-package main
+package clients
 
 import (
 	"encoding/json"
@@ -24,7 +24,7 @@ func NewTeamClient() *TeamClient {
 	return &TeamClient{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: 10 * time.Second, // timeout for http client
 		},
 	}
 }
@@ -60,7 +60,7 @@ func (tc *TeamClient) GetTeam(teamID int) (*Team, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("team service returned status: %d", resp.StatusCode)
+		return nil, fmt.Errorf("team service returned status: %d", resp.StatusCode) // error
 	}
 
 	var team Team
@@ -87,7 +87,7 @@ func (tc *TeamClient) IsUserInTeam(userID, teamID int) (bool, error) {
 
 	var members []TeamMember
 	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
-		return false, fmt.Errorf("failed to decode members response: %w", err)
+		return false, fmt.Errorf("failed to decode members response: %w", err) // Json format error
 	}
 
 	// Check if user is in the team
@@ -127,4 +127,26 @@ func (tc *TeamClient) GetUserRoleInTeam(userID, teamID int) (string, error) {
 	}
 
 	return "", fmt.Errorf("user not found in team")
+}
+
+// GetUserTeams returns all teams that a user belongs to
+func (tc *TeamClient) GetUserTeams(userID int) ([]Team, error) {
+	url := fmt.Sprintf("%s/users/%d/teams", tc.baseURL, userID)
+
+	resp, err := tc.httpClient.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call team service: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("team service returned status: %d", resp.StatusCode)
+	}
+
+	var teams []Team
+	if err := json.NewDecoder(resp.Body).Decode(&teams); err != nil {
+		return nil, fmt.Errorf("failed to decode teams response: %w", err)
+	}
+
+	return teams, nil
 }
