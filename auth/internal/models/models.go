@@ -1,4 +1,4 @@
-package main
+package models
 
 import (
 	"time"
@@ -101,7 +101,7 @@ type ChangePasswordRequest struct {
 // UserFilters represents filters for user listing
 type UserFilters struct {
 	Query  string `form:"q"`
-	Limit  int    `form:"limit,default=50"`
+	Limit  int    `form:"limit,default=10"`
 	Offset int    `form:"offset,default=0"`
 }
 
