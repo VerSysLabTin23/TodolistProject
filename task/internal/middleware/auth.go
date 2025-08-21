@@ -1,19 +1,20 @@
-package main
+package middleware
 
 import (
 	"net/http"
 	"strings"
 
+	"github.com/VerSysLabTin23/TodolistProject/task/internal/clients"
 	"github.com/gin-gonic/gin"
 )
 
 // AuthMiddleware handles authentication and authorization for Task Service
 type AuthMiddleware struct {
-	authClient *AuthClient
+	authClient *clients.AuthClient
 }
 
 // NewAuthMiddleware creates a new auth middleware
-func NewAuthMiddleware(authClient *AuthClient) *AuthMiddleware {
+func NewAuthMiddleware(authClient *clients.AuthClient) *AuthMiddleware {
 	return &AuthMiddleware{
 		authClient: authClient,
 	}
@@ -127,6 +128,7 @@ func GetUserIDFromContext(c *gin.Context) (int, bool) {
 	return 0, false
 }
 
+// -- Helper functions: --
 // GetUsernameFromContext extracts username from gin context
 func GetUsernameFromContext(c *gin.Context) (string, bool) {
 	username, exists := c.Get("username")
