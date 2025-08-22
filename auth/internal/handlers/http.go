@@ -1,39 +1,34 @@
-package main
+package handlers
 
 import (
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/VerSysLabTin23/TodolistProject/auth/internal/models"
+	"github.com/VerSysLabTin23/TodolistProject/auth/internal/repository"
+	"github.com/VerSysLabTin23/TodolistProject/auth/internal/service"
 )
 
 // AuthHandlers handles HTTP requests for authentication
 type AuthHandlers struct {
-	authService *AuthService
-	userRepo    UserRepository
+	authService *service.AuthService
+	userRepo    repository.UserRepository
 }
 
-// NewAuthHandlers creates new authentication handlers
-func NewAuthHandlers(authService *AuthService, userRepo UserRepository) *AuthHandlers {
-	return &AuthHandlers{
-		authService: authService,
-		userRepo:    userRepo,
-	}
+func NewAuthHandlers(authService *service.AuthService, userRepo repository.UserRepository) *AuthHandlers {
+	return &AuthHandlers{authService: authService, userRepo: userRepo}
 }
 
-// HealthCheck handles health check requests
-func (h *AuthHandlers) HealthCheck(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
-}
+func (h *AuthHandlers) HealthCheck(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) }
 
-// Register handles user registration
 func (h *AuthHandlers) Register(c *gin.Context) {
-	var req RegisterRequest
+	var req models.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", err.Error()))
 		return
 	}
-
 	user, err := h.authService.RegisterUser(req)
 	if err != nil {
 		switch err.Error() {
@@ -46,19 +41,16 @@ func (h *AuthHandlers) Register(c *gin.Context) {
 		}
 		return
 	}
-
 	c.JSON(http.StatusCreated, user.ToUserResponse())
 }
 
-// Login handles user authentication
 func (h *AuthHandlers) Login(c *gin.Context) {
-	var req LoginRequest
+	var req models.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", err.Error()))
 		return
 	}
-
-	response, err := h.authService.AuthenticateUser(req)
+	resp, err := h.authService.AuthenticateUser(req)
 	if err != nil {
 		switch err.Error() {
 		case "invalid credentials":
@@ -70,57 +62,33 @@ func (h *AuthHandlers) Login(c *gin.Context) {
 		}
 		return
 	}
-
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, resp)
 }
 
-// Refresh handles token refresh
 func (h *AuthHandlers) Refresh(c *gin.Context) {
-	var req RefreshRequest
+	var req models.RefreshRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", err.Error()))
 		return
 	}
-
-	response, err := h.authService.RefreshToken(req.RefreshToken)
+	resp, err := h.authService.RefreshToken(req.RefreshToken)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, errResp("UNAUTHORIZED", "Invalid refresh token"))
 		return
 	}
-
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, resp)
 }
 
-// Logout handles user logout
 func (h *AuthHandlers) Logout(c *gin.Context) {
-	// In a real implementation, you might want to blacklist the token
-	// For now, we just return success
 	c.JSON(http.StatusOK, gin.H{"message": "Logout successful"})
 }
 
-// ListUsers handles listing users (admin only)
 func (h *AuthHandlers) ListUsers(c *gin.Context) {
-	// TODO: Extract user from JWT and check if admin
-	userID := 1 // Placeholder - should come from JWT token
-
-	user, err := h.userRepo.GetByID(userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to get user"))
-		return
-	}
-
-	if user.Role != "admin" {
-		c.JSON(http.StatusForbidden, errResp("FORBIDDEN", "Insufficient permissions"))
-		return
-	}
-
-	var filters UserFilters
+	var filters models.UserFilters
 	if err := c.ShouldBindQuery(&filters); err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", err.Error()))
 		return
 	}
-
-	// Validate limits
 	if filters.Limit <= 0 {
 		filters.Limit = 50
 	}
@@ -130,50 +98,24 @@ func (h *AuthHandlers) ListUsers(c *gin.Context) {
 	if filters.Offset < 0 {
 		filters.Offset = 0
 	}
-
 	users, total, err := h.userRepo.List(filters)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to list users"))
 		return
 	}
-
-	// Convert to responses
-	var responses []UserResponse
-	for _, user := range users {
-		responses = append(responses, user.ToUserResponse())
+	responses := make([]models.UserResponse, 0, len(users))
+	for _, u := range users {
+		responses = append(responses, u.ToUserResponse())
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"users":  responses,
-		"total":  total,
-		"limit":  filters.Limit,
-		"offset": filters.Offset,
-	})
+	c.JSON(http.StatusOK, gin.H{"users": responses, "total": total, "limit": filters.Limit, "offset": filters.Offset})
 }
 
-// CreateUser handles user creation (admin only)
 func (h *AuthHandlers) CreateUser(c *gin.Context) {
-	// TODO: Extract user from JWT and check if admin
-	userID := 1 // Placeholder - should come from JWT token
-
-	user, err := h.userRepo.GetByID(userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to get user"))
-		return
-	}
-
-	if user.Role != "admin" {
-		c.JSON(http.StatusForbidden, errResp("FORBIDDEN", "Insufficient permissions"))
-		return
-	}
-
-	var req CreateUserRequest
+	var req models.CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", err.Error()))
 		return
 	}
-
-	// Check if username already exists
 	exists, err := h.userRepo.ExistsByUsername(req.Username)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to check username"))
@@ -183,8 +125,6 @@ func (h *AuthHandlers) CreateUser(c *gin.Context) {
 		c.JSON(http.StatusConflict, errResp("CONFLICT", "Username already exists"))
 		return
 	}
-
-	// Check if email already exists
 	exists, err = h.userRepo.ExistsByEmail(req.Email)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to check email"))
@@ -194,272 +134,159 @@ func (h *AuthHandlers) CreateUser(c *gin.Context) {
 		c.JSON(http.StatusConflict, errResp("CONFLICT", "Email already exists"))
 		return
 	}
-
-	// Hash password
-	hashedPassword, err := h.authService.HashPassword(req.Password)
+	hash, err := h.authService.HashPassword(req.Password)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to hash password"))
 		return
 	}
-
-	// Create user
-	newUser := &User{
-		Username:     req.Username,
-		Email:        req.Email,
-		PasswordHash: hashedPassword,
-		FirstName:    req.FirstName,
-		LastName:     req.LastName,
-		Role:         req.Role,
-		IsActive:     true,
-	}
-
+	newUser := &models.User{Username: req.Username, Email: req.Email, PasswordHash: hash, FirstName: req.FirstName, LastName: req.LastName, Role: req.Role, IsActive: true}
 	if err := h.userRepo.Create(newUser); err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to create user"))
 		return
 	}
-
 	c.JSON(http.StatusCreated, newUser.ToUserResponse())
 }
 
-// GetUser handles getting a user by ID
 func (h *AuthHandlers) GetUser(c *gin.Context) {
-	// TODO: Extract user from JWT and check permissions
-	userID := 1 // Placeholder - should come from JWT token
-
-	// Check if requesting user is admin or requesting their own profile
-	requestingUser, err := h.userRepo.GetByID(userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to get user"))
-		return
-	}
-
 	targetID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "Invalid user ID"))
 		return
 	}
-
-	// Only allow users to see their own profile or admins to see any profile
-	if requestingUser.Role != "admin" && requestingUser.ID != targetID {
-		c.JSON(http.StatusForbidden, errResp("FORBIDDEN", "Insufficient permissions"))
-		return
-	}
-
 	targetUser, err := h.userRepo.GetByID(targetID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, errResp("NOT_FOUND", "User not found"))
 		return
 	}
-
 	c.JSON(http.StatusOK, targetUser.ToUserResponse())
 }
 
-// UpdateUser handles updating a user
 func (h *AuthHandlers) UpdateUser(c *gin.Context) {
-	// TODO: Extract user from JWT and check permissions
-	userID := 1 // Placeholder - should come from JWT token
-
-	// Check if requesting user is admin or updating their own profile
-	requestingUser, err := h.userRepo.GetByID(userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to get user"))
-		return
-	}
-
 	targetID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "Invalid user ID"))
 		return
 	}
-
-	// Only allow users to update their own profile or admins to update any profile
-	if requestingUser.Role != "admin" && requestingUser.ID != targetID {
-		c.JSON(http.StatusForbidden, errResp("FORBIDDEN", "Insufficient permissions"))
-		return
-	}
-
-	var req UpdateUserRequest
+	var req models.UpdateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", err.Error()))
 		return
 	}
-
-	targetUser, err := h.userRepo.GetByID(targetID)
+	user, err := h.userRepo.GetByID(targetID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, errResp("NOT_FOUND", "User not found"))
 		return
 	}
-
-	// Update fields if provided
 	if req.Username != nil {
-		// Check if username already exists
-		if *req.Username != targetUser.Username {
-			exists, err := h.userRepo.ExistsByUsername(*req.Username)
-			if err != nil {
+		if *req.Username != user.Username {
+			if exists, err := h.userRepo.ExistsByUsername(*req.Username); err != nil {
 				c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to check username"))
 				return
-			}
-			if exists {
+			} else if exists {
 				c.JSON(http.StatusConflict, errResp("CONFLICT", "Username already exists"))
 				return
 			}
 		}
-		targetUser.Username = *req.Username
+		user.Username = *req.Username
 	}
-
 	if req.Email != nil {
-		// Check if email already exists
-		if *req.Email != targetUser.Email {
-			exists, err := h.userRepo.ExistsByEmail(*req.Email)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to check email"))
-				return
-			}
-			if exists {
-				c.JSON(http.StatusConflict, errResp("CONFLICT", "Email already exists"))
-				return
-			}
-		}
-		targetUser.Email = *req.Email
-	}
-
-	if req.FirstName != nil {
-		targetUser.FirstName = *req.FirstName
-	}
-
-	if req.LastName != nil {
-		targetUser.LastName = *req.LastName
-	}
-
-	// Only admins can change role and active status
-	if requestingUser.Role == "admin" {
-		if req.Role != nil {
-			targetUser.Role = *req.Role
-		}
-		if req.IsActive != nil {
-			targetUser.IsActive = *req.IsActive
-		}
-	}
-
-	if err := h.userRepo.Update(targetUser); err != nil {
-		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to update user"))
-		return
-	}
-
-	c.JSON(http.StatusOK, targetUser.ToUserResponse())
-}
-
-// DeleteUser handles deleting a user (admin only)
-func (h *AuthHandlers) DeleteUser(c *gin.Context) {
-	// TODO: Extract user from JWT and check if admin
-	userID := 1 // Placeholder - should come from JWT token
-
-	user, err := h.userRepo.GetByID(userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to get user"))
-		return
-	}
-
-	if user.Role != "admin" {
-		c.JSON(http.StatusForbidden, errResp("FORBIDDEN", "Insufficient permissions"))
-		return
-	}
-
-	targetID, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "Invalid user ID"))
-		return
-	}
-
-	// Prevent admin from deleting themselves
-	if targetID == userID {
-		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "Cannot delete your own account"))
-		return
-	}
-
-	if err := h.userRepo.Delete(targetID); err != nil {
-		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to delete user"))
-		return
-	}
-
-	c.Status(http.StatusNoContent)
-}
-
-// GetProfile handles getting current user profile
-func (h *AuthHandlers) GetProfile(c *gin.Context) {
-	// TODO: Extract user from JWT
-	userID := 1 // Placeholder - should come from JWT token
-
-	user, err := h.userRepo.GetByID(userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to get user"))
-		return
-	}
-
-	c.JSON(http.StatusOK, user.ToUserResponse())
-}
-
-// UpdateProfile handles updating current user profile
-func (h *AuthHandlers) UpdateProfile(c *gin.Context) {
-	// TODO: Extract user from JWT
-	userID := 1 // Placeholder - should come from JWT token
-
-	var req UpdateProfileRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", err.Error()))
-		return
-	}
-
-	user, err := h.userRepo.GetByID(userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to get user"))
-		return
-	}
-
-	// Update fields if provided
-	if req.FirstName != nil {
-		user.FirstName = *req.FirstName
-	}
-
-	if req.LastName != nil {
-		user.LastName = *req.LastName
-	}
-
-	if req.Email != nil {
-		// Check if email already exists
 		if *req.Email != user.Email {
-			exists, err := h.userRepo.ExistsByEmail(*req.Email)
-			if err != nil {
+			if exists, err := h.userRepo.ExistsByEmail(*req.Email); err != nil {
 				c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to check email"))
 				return
-			}
-			if exists {
+			} else if exists {
 				c.JSON(http.StatusConflict, errResp("CONFLICT", "Email already exists"))
 				return
 			}
 		}
 		user.Email = *req.Email
 	}
-
+	if req.FirstName != nil {
+		user.FirstName = *req.FirstName
+	}
+	if req.LastName != nil {
+		user.LastName = *req.LastName
+	}
+	if req.Role != nil {
+		user.Role = *req.Role
+	}
+	if req.IsActive != nil {
+		user.IsActive = *req.IsActive
+	}
 	if err := h.userRepo.Update(user); err != nil {
-		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to update profile"))
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to update user"))
 		return
 	}
-
 	c.JSON(http.StatusOK, user.ToUserResponse())
 }
 
-// ChangePassword handles changing user password
-func (h *AuthHandlers) ChangePassword(c *gin.Context) {
-	// TODO: Extract user from JWT
-	userID := 1 // Placeholder - should come from JWT token
+func (h *AuthHandlers) DeleteUser(c *gin.Context) {
+	targetID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "Invalid user ID"))
+		return
+	}
+	if err := h.userRepo.Delete(targetID); err != nil {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to delete user"))
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
 
-	var req ChangePasswordRequest
+func (h *AuthHandlers) GetProfile(c *gin.Context) {
+	userID := c.GetInt("userID")
+	user, err := h.userRepo.GetByID(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to get user"))
+		return
+	}
+	c.JSON(http.StatusOK, user.ToUserResponse())
+}
+
+func (h *AuthHandlers) UpdateProfile(c *gin.Context) {
+	userID := c.GetInt("userID")
+	var req models.UpdateProfileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", err.Error()))
 		return
 	}
+	user, err := h.userRepo.GetByID(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to get user"))
+		return
+	}
+	if req.FirstName != nil {
+		user.FirstName = *req.FirstName
+	}
+	if req.LastName != nil {
+		user.LastName = *req.LastName
+	}
+	if req.Email != nil {
+		if *req.Email != user.Email {
+			if exists, err := h.userRepo.ExistsByEmail(*req.Email); err != nil {
+				c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to check email"))
+				return
+			} else if exists {
+				c.JSON(http.StatusConflict, errResp("CONFLICT", "Email already exists"))
+				return
+			}
+		}
+		user.Email = *req.Email
+	}
+	if err := h.userRepo.Update(user); err != nil {
+		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "Failed to update profile"))
+		return
+	}
+	c.JSON(http.StatusOK, user.ToUserResponse())
+}
 
+func (h *AuthHandlers) ChangePassword(c *gin.Context) {
+	userID := c.GetInt("userID")
+	var req models.ChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", err.Error()))
+		return
+	}
 	if err := h.authService.ChangePassword(userID, req); err != nil {
 		switch err.Error() {
 		case "user not found":
@@ -471,14 +298,7 @@ func (h *AuthHandlers) ChangePassword(c *gin.Context) {
 		}
 		return
 	}
-
 	c.JSON(http.StatusOK, gin.H{"message": "Password changed successfully"})
 }
 
-// Helper function to create error responses
-func errResp(code, message string) gin.H {
-	return gin.H{
-		"code":    code,
-		"message": message,
-	}
-}
+func errResp(code, message string) gin.H { return gin.H{"code": code, "message": message} }

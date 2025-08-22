@@ -1,4 +1,4 @@
-package main
+package models
 
 import (
 	"time"
@@ -9,8 +9,8 @@ import (
 // User represents a user in the system
 type User struct {
 	ID           int       `json:"id" gorm:"primaryKey"`
-	Username     string    `json:"username" gorm:"uniqueIndex;not null"`
-	Email        string    `json:"email" gorm:"uniqueIndex;not null"`
+	Username     string    `json:"username" gorm:"size:255;uniqueIndex;not null"`
+	Email        string    `json:"email" gorm:"size:255;uniqueIndex;not null"`
 	PasswordHash string    `json:"-" gorm:"column:password_hash;not null"`
 	FirstName    string    `json:"firstName" gorm:"column:first_name"`
 	LastName     string    `json:"lastName" gorm:"column:last_name"`
@@ -101,7 +101,7 @@ type ChangePasswordRequest struct {
 // UserFilters represents filters for user listing
 type UserFilters struct {
 	Query  string `form:"q"`
-	Limit  int    `form:"limit,default=50"`
+	Limit  int    `form:"limit,default=10"`
 	Offset int    `form:"offset,default=0"`
 }
 

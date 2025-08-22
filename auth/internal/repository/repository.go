@@ -1,18 +1,20 @@
-package main
+package repository
 
 import (
 	"gorm.io/gorm"
+
+	"github.com/VerSysLabTin23/TodolistProject/auth/internal/models"
 )
 
 // UserRepository defines the interface for user data operations
 type UserRepository interface {
-	Create(user *User) error
-	GetByID(id int) (*User, error)
-	GetByUsername(username string) (*User, error)
-	GetByEmail(email string) (*User, error)
-	Update(user *User) error
+	Create(user *models.User) error
+	GetByID(id int) (*models.User, error)
+	GetByUsername(username string) (*models.User, error)
+	GetByEmail(email string) (*models.User, error)
+	Update(user *models.User) error
 	Delete(id int) error
-	List(filters UserFilters) ([]User, int64, error)
+	List(filters models.UserFilters) ([]models.User, int64, error)
 	ExistsByUsername(username string) (bool, error)
 	ExistsByEmail(email string) (bool, error)
 }
@@ -28,13 +30,13 @@ func NewUserRepository(db *gorm.DB) UserRepository {
 }
 
 // Create creates a new user
-func (r *GormUserRepository) Create(user *User) error {
+func (r *GormUserRepository) Create(user *models.User) error {
 	return r.db.Create(user).Error
 }
 
 // GetByID retrieves a user by ID
-func (r *GormUserRepository) GetByID(id int) (*User, error) {
-	var user User
+func (r *GormUserRepository) GetByID(id int) (*models.User, error) {
+	var user models.User
 	err := r.db.Where("id = ?", id).First(&user).Error
 	if err != nil {
 		return nil, err
@@ -43,8 +45,8 @@ func (r *GormUserRepository) GetByID(id int) (*User, error) {
 }
 
 // GetByUsername retrieves a user by username
-func (r *GormUserRepository) GetByUsername(username string) (*User, error) {
-	var user User
+func (r *GormUserRepository) GetByUsername(username string) (*models.User, error) {
+	var user models.User
 	err := r.db.Where("username = ?", username).First(&user).Error
 	if err != nil {
 		return nil, err
@@ -53,8 +55,8 @@ func (r *GormUserRepository) GetByUsername(username string) (*User, error) {
 }
 
 // GetByEmail retrieves a user by email
-func (r *GormUserRepository) GetByEmail(email string) (*User, error) {
-	var user User
+func (r *GormUserRepository) GetByEmail(email string) (*models.User, error) {
+	var user models.User
 	err := r.db.Where("email = ?", email).First(&user).Error
 	if err != nil {
 		return nil, err
@@ -63,21 +65,21 @@ func (r *GormUserRepository) GetByEmail(email string) (*User, error) {
 }
 
 // Update updates an existing user
-func (r *GormUserRepository) Update(user *User) error {
+func (r *GormUserRepository) Update(user *models.User) error {
 	return r.db.Save(user).Error
 }
 
 // Delete deletes a user by ID
 func (r *GormUserRepository) Delete(id int) error {
-	return r.db.Delete(&User{}, id).Error
+	return r.db.Delete(&models.User{}, id).Error
 }
 
 // List retrieves a list of users with filters and pagination
-func (r *GormUserRepository) List(filters UserFilters) ([]User, int64, error) {
-	var users []User
+func (r *GormUserRepository) List(filters models.UserFilters) ([]models.User, int64, error) {
+	var users []models.User
 	var total int64
 
-	query := r.db.Model(&User{})
+	query := r.db.Model(&models.User{})
 
 	// Apply search filter
 	if filters.Query != "" {
@@ -106,13 +108,13 @@ func (r *GormUserRepository) List(filters UserFilters) ([]User, int64, error) {
 // ExistsByUsername checks if a user with the given username exists
 func (r *GormUserRepository) ExistsByUsername(username string) (bool, error) {
 	var count int64
-	err := r.db.Model(&User{}).Where("username = ?", username).Count(&count).Error
+	err := r.db.Model(&models.User{}).Where("username = ?", username).Count(&count).Error
 	return count > 0, err
 }
 
 // ExistsByEmail checks if a user with the given email exists
 func (r *GormUserRepository) ExistsByEmail(email string) (bool, error) {
 	var count int64
-	err := r.db.Model(&User{}).Where("email = ?", email).Count(&count).Error
+	err := r.db.Model(&models.User{}).Where("email = ?", email).Count(&count).Error
 	return count > 0, err
 }
