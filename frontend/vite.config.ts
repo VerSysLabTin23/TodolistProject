@@ -5,11 +5,23 @@ export default defineConfig({
     plugins: [react()],
     server: {
         proxy: {
-            // hit http://localhost:5173/api/auth/login → forwarded to the auth service
+            // auth service (8084)
             '/api': {
-                target: 'http://localhost:8084', // <— replace with the REAL auth port if different
+                target: 'http://localhost:8084',
                 changeOrigin: true,
-                rewrite: (path) => path.replace(/^\/api/, ''),
+                rewrite: (p) => p.replace(/^\/api/, ''),
+            },
+            // team service (8083)
+            '/team-api': {
+                target: 'http://localhost:8083',
+                changeOrigin: true,
+                rewrite: (p) => p.replace(/^\/team-api/, ''),
+            },
+            // task service (8081)
+            '/task-api': {
+                target: 'http://localhost:8081',
+                changeOrigin: true,
+                rewrite: (p) => p.replace(/^\/task-api/, ''),
             },
         },
     },
