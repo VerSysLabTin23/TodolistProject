@@ -11,7 +11,6 @@ import (
 
 	"github.com/VerSysLabTin23/TodolistProject/auth/internal/handlers"
 	"github.com/VerSysLabTin23/TodolistProject/auth/internal/middleware"
-	"github.com/VerSysLabTin23/TodolistProject/auth/internal/models"
 	"github.com/VerSysLabTin23/TodolistProject/auth/internal/repository"
 	"github.com/VerSysLabTin23/TodolistProject/auth/internal/service"
 )
@@ -25,14 +24,12 @@ func main() {
 	dbName := getEnv("DB_NAME", "authdb")
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&loc=UTC&charset=utf8mb4", dbUser, dbPass, dbHost, dbPort, dbName)
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(mysql.New(mysql.Config{DSN: dsn, DefaultStringSize: 191}), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	if err := db.AutoMigrate(&models.User{}); err != nil {
-		log.Fatalf("Failed to migrate database: %v", err)
-	}
+	// Schema is managed by dbmate migrations; avoid automatic schema changes here.
 
 	userRepo := repository.NewUserRepository(db)
 	authService := service.NewAuthService(userRepo)
