@@ -17,8 +17,8 @@ export default function LoginForm() {
             localStorage.setItem("accessToken", res.accessToken);
             localStorage.setItem("refreshToken", res.refreshToken);
             localStorage.setItem("currentUser", JSON.stringify(res.user));
-            alert(`Welcome, ${res.user.username}`);
-            navigate("/"); // or navigate to dashboard route
+            // alert(`Welcome, ${res.user.username}`);
+            navigate("/welcome"); // or navigate to dashboard route
         } catch (error: unknown) {
             alert(getAxiosErrorMessage(error)); // <- USES error
         } finally {
