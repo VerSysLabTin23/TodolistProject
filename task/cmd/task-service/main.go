@@ -7,6 +7,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+
+	"github.com/VerSysLabTin23/TodolistProject/task/internal/clients"
+	"github.com/VerSysLabTin23/TodolistProject/task/internal/handlers"
+	"github.com/VerSysLabTin23/TodolistProject/task/internal/middleware"
+	"github.com/VerSysLabTin23/TodolistProject/task/internal/repository"
 )
 
 func main() {
@@ -26,11 +31,11 @@ func main() {
 	}
 
 	// --- wire repos/handlers ---
-	repo := NewTaskRepository(gdb)
-	teamClient := NewTeamClient()
-	authClient := NewAuthClient()
-	h := NewTaskHandlers(repo, teamClient)
-	auth := NewAuthMiddleware(authClient)
+	repo := repository.NewTaskRepository(gdb)
+	teamClient := clients.NewTeamClient()
+	authClient := clients.NewAuthClient()
+	h := handlers.NewTaskHandlers(repo, teamClient)
+	auth := middleware.NewAuthMiddleware(authClient)
 
 	// --- router ---
 	r := gin.Default()

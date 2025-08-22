@@ -1,4 +1,4 @@
-package main
+package models
 
 import (
 	"errors"
@@ -79,7 +79,7 @@ type TaskFilters struct {
 
 // --- helpers ---
 
-func mapTask(t Task) TaskResponse {
+func MapTask(t Task) TaskResponse {
 	return TaskResponse{
 		ID:          t.ID,
 		TeamID:      t.TeamID,
@@ -95,15 +95,15 @@ func mapTask(t Task) TaskResponse {
 	}
 }
 
-func mapTasks(ts []Task) []TaskResponse {
+func MapTasks(ts []Task) []TaskResponse {
 	out := make([]TaskResponse, 0, len(ts))
 	for _, t := range ts {
-		out = append(out, mapTask(t))
+		out = append(out, MapTask(t))
 	}
 	return out
 }
 
-func parseID(s string) (int, error) {
+func ParseID(s string) (int, error) {
 	id, err := strconv.Atoi(s)
 	if err != nil || id < 1 {
 		return 0, errors.New("invalid id")
@@ -111,10 +111,10 @@ func parseID(s string) (int, error) {
 	return id, nil
 }
 
-func parseDateYYYYMMDD(s string) (time.Time, error) {
+func ParseDateYYYYMMDD(s string) (time.Time, error) {
 	return time.Parse("2006-01-02", s)
 }
 
-func validatePriority(priority string) bool {
+func ValidatePriority(priority string) bool {
 	return priority == "low" || priority == "medium" || priority == "high"
 }

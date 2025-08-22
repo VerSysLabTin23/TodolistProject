@@ -42,7 +42,7 @@ services:
       DATABASE_URL: "mysql://root:pass@team-db:3306/teamsdb?parseTime=true&loc=UTC&charset=utf8mb4"
     volumes:
       - ./team/migrations:/db/migrations:ro
-    command: ["up"]
+    command: ["--wait", "up"]
     restart: "no"
     networks: [app-net]
 
@@ -81,7 +81,7 @@ services:
       DATABASE_URL: "mysql://root:pass@task-db:3306/tasksdb?parseTime=true&loc=UTC&charset=utf8mb4"
     volumes:
       - ./task/migrations:/db/migrations:ro
-    command: ["up"]
+    command: ["--wait", "up"]
     restart: "no"
     networks: [app-net]
 
@@ -130,21 +130,21 @@ services:
     networks: [app-net]
 
   # Team phpMyAdmin
-  team-phpmyadmin:
-    image: phpmyadmin:latest
-    container_name: team_phpmyadmin
-    depends_on:
-      team-db:
-        condition: service_healthy
-    environment:
-      PMA_HOST: team-db
-      PMA_PORT: 3306
-      PMA_USER: root
-      PMA_PASSWORD: pass
-      UPLOAD_LIMIT: 64M
-    ports:
-      - "8084:80"
-    networks: [app-net]
+  # team-phpmyadmin:
+  #   image: phpmyadmin:latest
+  #   container_name: team_phpmyadmin
+  #   depends_on:
+  #     team-db:
+  #       condition: service_healthy
+  #   environment:
+  #     PMA_HOST: team-db
+  #     PMA_PORT: 3306
+  #     PMA_USER: root
+  #     PMA_PASSWORD: pass
+  #     UPLOAD_LIMIT: 64M
+  #   ports:
+  #     - "8088:80"
+  #   networks: [app-net]
 
   auth-db:
     image: mysql:8.0
@@ -171,7 +171,7 @@ services:
       DATABASE_URL: "mysql://root:pass@auth-db:3306/authdb?parseTime=true&loc=UTC&charset=utf8mb4"
     volumes:
       - ./auth/migrations:/db/migrations:ro
-    command: ["up"]
+    command: ["--wait", "up"]
     restart: "no"
     networks: [app-net]
 

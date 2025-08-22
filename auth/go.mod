@@ -1,4 +1,4 @@
-module auth-service
+module github.com/VerSysLabTin23/TodolistProject/auth
 
 go 1.21
 
