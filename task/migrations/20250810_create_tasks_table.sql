@@ -15,10 +15,9 @@ CREATE TABLE IF NOT EXISTS tasks (
     INDEX idx_tasks_creator_id (creator_id),
     INDEX idx_tasks_assignee_id (assignee_id),
     INDEX idx_tasks_due (due),
-    INDEX idx_tasks_priority_due (priority, due),
-    CONSTRAINT fk_tasks_team_id FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
-    CONSTRAINT fk_tasks_creator_id FOREIGN KEY (creator_id) REFERENCES users(id) ON DELETE RESTRICT,
-    CONSTRAINT fk_tasks_assignee_id FOREIGN KEY (assignee_id) REFERENCES users(id) ON DELETE SET NULL
+    INDEX idx_tasks_priority_due (priority, due)
+    -- Foreign keys to external services (teams, users) are not enforced at DB level
+    -- to avoid cross-database/service coupling. Application layer validates these IDs.
 );
 
 -- migrate:down
