@@ -1,5 +1,5 @@
 import { http } from "./http";
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 
 export type UserResponse = {
     id: number;
@@ -28,6 +28,8 @@ export type RegisterRequest = {
     lastName?: string;
 };
 
+type ApiErrorBody = { message?: string; code?: string };
+
 export async function login(data: LoginRequest): Promise<LoginResponse> {
     const { data: res } = await http.post<LoginResponse>("/auth/login", data);
     return res;
@@ -41,11 +43,10 @@ export async function register(data: RegisterRequest): Promise<UserResponse> {
 // small helper to extract readable error message
 export function getAxiosErrorMessage(error: unknown): string {
     if (axios.isAxiosError(error)) {
-        return (
-            (error.response?.data as any)?.message ||
-            error.response?.statusText ||
-            error.message
-        );
+        const axErr = error as AxiosError<ApiErrorBody>;
+        return axErr.response?.data?.message
+            ?? axErr.response?.statusText
+            ?? axErr.message;
     }
     return "Unexpected error";
 }
