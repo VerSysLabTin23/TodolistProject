@@ -1,5 +1,5 @@
 -- migrate:up
--- Insert default admin user (password: admin123)
+-- Insert default admin user (password: password)
 -- In production, this should be changed immediately
 INSERT INTO users (id, username, email, password_hash, first_name, last_name, role, is_active, created_at, updated_at)
 VALUES

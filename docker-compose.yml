@@ -51,6 +51,7 @@ services:
     build:
       context: ./team
       dockerfile: ./Dockerfile
+    container_name: team_service
     depends_on:
       team-db:
         condition: service_healthy
@@ -90,6 +91,7 @@ services:
     build:
       context: ./task
       dockerfile: ./Dockerfile
+    container_name: task_service
     depends_on:
       task-db:
         condition: service_healthy
@@ -179,6 +181,7 @@ services:
     build:
       context: ./auth
       dockerfile: ./Dockerfile
+    container_name: auth_service
     depends_on:
       auth-db:
         condition: service_healthy
