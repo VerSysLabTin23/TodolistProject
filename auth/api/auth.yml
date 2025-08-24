@@ -62,8 +62,6 @@ paths:
   /auth/refresh:
     post:
       summary: Refresh access token
-      security:
-        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -77,6 +75,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoginResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /validate:
+    post:
+      summary: Validate JWT access token
+      description: Requires Authorization header; returns basic user info when token is valid.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Token is valid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidateResponse'
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   /auth/logout:
@@ -366,6 +379,19 @@ components:
         accessToken: { type: string, example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
         refreshToken: { type: string, example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
         user: { $ref: '#/components/schemas/UserResponse' }
+
+    ValidateResponse:
+      type: object
+      required: [valid, user]
+      properties:
+        valid: { type: boolean, example: true }
+        user:
+          type: object
+          required: [id, username, role]
+          properties:
+            id: { type: integer, format: int64, example: 1 }
+            username: { type: string, example: "admin" }
+            role: { type: string, enum: [user, admin], example: "admin" }
 
     RefreshRequest:
       type: object

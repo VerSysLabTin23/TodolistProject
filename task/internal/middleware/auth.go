@@ -71,6 +71,7 @@ func (am *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 		c.Set("userID", userInfo.User.ID)
 		c.Set("username", userInfo.User.Username)
 		c.Set("userRole", userInfo.User.Role)
+		c.Set("authToken", token)
 
 		c.Next()
 	}

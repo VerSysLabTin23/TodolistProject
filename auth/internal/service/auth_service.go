@@ -112,6 +112,12 @@ func (s *AuthService) RefreshToken(refreshToken string) (*models.LoginResponse, 
 	return &models.LoginResponse{AccessToken: accessToken, RefreshToken: newRefreshToken, User: user.ToUserResponse()}, nil
 }
 
+// ValidateToken verifies a JWT (access or refresh) and returns its claims if valid.
+// It ensures:
+// - the token is well-formed and signed using an HMAC algorithm (e.g., HS256)
+// - the signature matches the configured JWT secret
+// - standard registered claims (exp, iat, etc.) are valid
+// Returns an error if any validation step fails.
 func (s *AuthService) ValidateToken(tokenString string) (*models.Claims, error) {
 	return s.parseToken(tokenString)
 }
@@ -144,6 +150,13 @@ func (s *AuthService) generateRefreshToken(user *models.User) (string, error) {
 	return token.SignedString(s.jwtSecret)
 }
 
+// parseToken parses and validates a JWT string.
+// Flow:
+//  1. jwt.ParseWithClaims decodes the token and verifies the signature via the key func below
+//  2. Only HMAC signing methods are accepted; other algorithms are rejected
+//  3. The key func returns the server's JWT secret used to verify the signature
+//  4. On success, the library checks standard registered claims and sets token.Valid
+//  5. We assert the claims to our typed struct and return them if token.Valid is true
 func (s *AuthService) parseToken(tokenString string) (*models.Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &models.Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -151,6 +164,11 @@ func (s *AuthService) parseToken(tokenString string) (*models.Claims, error) {
 		}
 		return s.jwtSecret, nil
 	})
+	// ParseWithClaims:
+	// 1. parse tokenstring to header, payload, signature and store header and payload in models.Claims
+	// 2. func return the secretKey
+	// 3. secretKey + header.payload -> expected signature
+	// 4. signature == expected signature? token.valid=true :token.valid=false
 	if err != nil {
 		return nil, err
 	}

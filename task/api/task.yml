@@ -25,7 +25,7 @@ paths:
   /teams/{teamId}/tasks:
     get:
       summary: List tasks of a team
-      description: Returns tasks in the team, sorted by priority then due date.
+      description: Returns tasks in the team, sorted by priority then due date. Requires Authorization and membership in the team (validated via Team Service).
       parameters:
         - $ref: '#/components/parameters/TeamId'
         - $ref: '#/components/parameters/FilterCompleted'
@@ -50,7 +50,7 @@ paths:
     post:
       summary: Create a new task in a team
       description: >
-        Creates a task under the specified team. The caller must be a member of the team.
+        Creates a task under the specified team. The caller must be a member of the team (validated via Team Service).
         The creatorId is derived from the authenticated user.
       parameters:
         - $ref: '#/components/parameters/TeamId'
@@ -76,7 +76,7 @@ paths:
   /tasks:
     get:
       summary: Retrieve tasks accessible to the caller (across teams)
-      description: Returns tasks the caller can access, sorted by priority then due date.
+      description: Returns tasks the caller can access, sorted by priority then due date. Requires Authorization; visibility based on user's teams via Team Service.
       parameters:
         - $ref: '#/components/parameters/FilterTeamId'
         - $ref: '#/components/parameters/FilterCompleted'
@@ -100,6 +100,7 @@ paths:
   /tasks/{id}:
     get:
       summary: Retrieve a single task
+      description: Requires Authorization and must be member in the task's team.
       parameters:
         - $ref: '#/components/parameters/TaskId'
       responses:
@@ -121,7 +122,7 @@ paths:
     put:
       summary: Update a task (full or partial)
       description: >
-        Updates mutable fields of the task. The caller must be a team member.
+        Updates mutable fields of the task. The caller must be a team member (validated via Team Service).
         Use this for general edits; for quick complete/assignee updates you may prefer the sub-resources below.
       parameters:
         - $ref: '#/components/parameters/TaskId'
@@ -145,6 +146,7 @@ paths:
 
     delete:
       summary: Delete a task
+      description: Requires Authorization and membership. Additional ownership checks may be added later.
       parameters:
         - $ref: '#/components/parameters/TaskId'
       responses:
@@ -158,7 +160,7 @@ paths:
   /tasks/{id}/assignee:
     put:
       summary: Set or clear assignee
-      description: Set `assigneeId` to a team member, or null to unassign.
+      description: Set `assigneeId` to a team member, or null to unassign. Requires Authorization and team membership.
       parameters:
         - $ref: '#/components/parameters/TaskId'
       requestBody:
@@ -182,7 +184,7 @@ paths:
   /tasks/{id}/complete:
     post:
       summary: Mark task completed or not
-      description: Toggle completion state quickly.
+      description: Toggle completion state quickly. Requires Authorization and team membership.
       parameters:
         - $ref: '#/components/parameters/TaskId'
       requestBody:

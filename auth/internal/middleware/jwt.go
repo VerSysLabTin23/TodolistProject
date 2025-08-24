@@ -15,6 +15,11 @@ func NewJWTMiddleware(authService *service.AuthService) *JWTMiddleware {
 	return &JWTMiddleware{authService: authService}
 }
 
+// RequireAuth validates the Authorization header and verifies the JWT:
+// - expects header format: "Authorization: Bearer <token>"
+// - extracts token and delegates validation to AuthService.ValidateToken
+// - on success, puts user information (id, username, role) into the request context
+// - on failure, responds 401 and aborts the request
 func (m *JWTMiddleware) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -29,7 +34,7 @@ func (m *JWTMiddleware) RequireAuth() gin.HandlerFunc {
 			return
 		}
 		token := strings.TrimPrefix(authHeader, "Bearer ")
-		claims, err := m.authService.ValidateToken(token)
+		claims, err := m.authService.ValidateToken(token) // validate token: parse token and check if it is valid
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED", "message": "Invalid or expired token"})
 			c.Abort()
