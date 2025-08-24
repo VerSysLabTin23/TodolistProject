@@ -33,8 +33,12 @@ func (h *TaskHandlers) ListTasksByTeam(c *gin.Context) {
 		return
 	}
 
+	// Bearer token from middleware
+	bt, _ := c.Get("authToken")
+	token, _ := bt.(string)
+
 	// Verify team exists by calling Team Service
-	team, err := h.teamClient.GetTeam(teamID)
+	team, err := h.teamClient.GetTeam(teamID, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team"))
 		return
@@ -58,7 +62,7 @@ func (h *TaskHandlers) ListTasksByTeam(c *gin.Context) {
 	}
 
 	// Verify user is member of the team
-	isMember, err := h.teamClient.IsUserInTeam(userID, teamID)
+	isMember, err := h.teamClient.IsUserInTeam(userID, teamID, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team membership"))
 		return
@@ -85,8 +89,12 @@ func (h *TaskHandlers) CreateTaskInTeam(c *gin.Context) {
 		return
 	}
 
+	// Bearer token from middleware
+	bt, _ := c.Get("authToken")
+	token, _ := bt.(string)
+
 	// Verify team exists by calling Team Service
-	team, err := h.teamClient.GetTeam(teamID)
+	team, err := h.teamClient.GetTeam(teamID, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team"))
 		return
@@ -129,7 +137,7 @@ func (h *TaskHandlers) CreateTaskInTeam(c *gin.Context) {
 	}
 
 	// Verify user is member of the team
-	isMember, err := h.teamClient.IsUserInTeam(creatorID, teamID)
+	isMember, err := h.teamClient.IsUserInTeam(creatorID, teamID, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team membership"))
 		return
@@ -172,7 +180,11 @@ func (h *TaskHandlers) ListTasksAcrossTeams(c *gin.Context) {
 		return
 	}
 
-	teams, err := h.teamClient.GetUserTeams(userID)
+	// Bearer token from middleware
+	bt, _ := c.Get("authToken")
+	token, _ := bt.(string)
+
+	teams, err := h.teamClient.GetUserTeams(userID, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to fetch user teams"))
 		return
@@ -221,8 +233,12 @@ func (h *TaskHandlers) GetTask(c *gin.Context) {
 		return
 	}
 
+	// Bearer token from middleware
+	bt, _ := c.Get("authToken")
+	token, _ := bt.(string)
+
 	// Verify user is member of the team
-	isMember, err := h.teamClient.IsUserInTeam(userID, t.TeamID)
+	isMember, err := h.teamClient.IsUserInTeam(userID, t.TeamID, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team membership"))
 		return
@@ -266,8 +282,12 @@ func (h *TaskHandlers) UpdateTask(c *gin.Context) {
 		return
 	}
 
+	// Bearer token from middleware
+	bt, _ := c.Get("authToken")
+	token, _ := bt.(string)
+
 	// Verify user is member of the team
-	isMember, err := h.teamClient.IsUserInTeam(userID, t.TeamID)
+	isMember, err := h.teamClient.IsUserInTeam(userID, t.TeamID, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team membership"))
 		return
@@ -305,12 +325,10 @@ func (h *TaskHandlers) UpdateTask(c *gin.Context) {
 	if req.AssigneeID != nil {
 		// Verify assignee is member of the team
 		if *req.AssigneeID != 0 {
-			isAssigneeMember, err := h.teamClient.IsUserInTeam(*req.AssigneeID, t.TeamID)
-			if err != nil {
+			if ok, err := h.teamClient.IsUserInTeam(*req.AssigneeID, t.TeamID, token); err != nil {
 				c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify assignee team membership"))
 				return
-			}
-			if !isAssigneeMember {
+			} else if !ok {
 				c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "assignee must be a member of the team"))
 				return
 			}
@@ -351,8 +369,12 @@ func (h *TaskHandlers) DeleteTask(c *gin.Context) {
 		return
 	}
 
+	// Bearer token from middleware
+	bt, _ := c.Get("authToken")
+	token, _ := bt.(string)
+
 	// Verify user is member of the team
-	isMember, err := h.teamClient.IsUserInTeam(userID, t.TeamID)
+	isMember, err := h.teamClient.IsUserInTeam(userID, t.TeamID, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team membership"))
 		return
@@ -405,8 +427,12 @@ func (h *TaskHandlers) SetAssignee(c *gin.Context) {
 		return
 	}
 
+	// Bearer token from middleware
+	bt, _ := c.Get("authToken")
+	token, _ := bt.(string)
+
 	// Verify user is member of the team
-	isMember, err := h.teamClient.IsUserInTeam(userID, task.TeamID)
+	isMember, err := h.teamClient.IsUserInTeam(userID, task.TeamID, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team membership"))
 		return
@@ -469,8 +495,12 @@ func (h *TaskHandlers) UpdateCompletion(c *gin.Context) {
 		return
 	}
 
+	// Bearer token from middleware
+	bt, _ := c.Get("authToken")
+	token, _ := bt.(string)
+
 	// Verify user is member of the team
-	isMember, err := h.teamClient.IsUserInTeam(userID, task.TeamID)
+	isMember, err := h.teamClient.IsUserInTeam(userID, task.TeamID, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team membership"))
 		return

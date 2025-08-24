@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -23,14 +24,23 @@ func NewAuthMiddleware(repo TeamRepository, authClient *AuthClient) *AuthMiddlew
 // RequireTeamMembership ensures user is a member of the team
 func (am *AuthMiddleware) RequireTeamMembership() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Extract user ID from JWT context
-		userID, exists := c.Get("userID")
-		if !exists {
-			c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
+		// Validate Authorization header with Auth Service and set user in context
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+			c.JSON(http.StatusUnauthorized, errResp("UNAUTHORIZED", "Missing or invalid authorization header"))
 			c.Abort()
 			return
 		}
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		userInfo, err := am.authClient.ValidateToken(token)
+		if err != nil || !userInfo.Valid {
+			c.JSON(http.StatusUnauthorized, errResp("UNAUTHORIZED", "Invalid or expired token"))
+			c.Abort()
+			return
+		}
+		c.Set("userID", userInfo.User.ID)
 
+		userID, _ := c.Get("userID")
 		userIDInt, ok := userID.(int)
 		if !ok {
 			c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "invalid user ID type"))
@@ -69,14 +79,23 @@ func (am *AuthMiddleware) RequireTeamMembership() gin.HandlerFunc {
 // RequireTeamOwner ensures user is the owner of the team
 func (am *AuthMiddleware) RequireTeamOwner() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Extract user ID from JWT context
-		userID, exists := c.Get("userID")
-		if !exists {
-			c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
+		// Validate Authorization header with Auth Service and set user in context
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+			c.JSON(http.StatusUnauthorized, errResp("UNAUTHORIZED", "Missing or invalid authorization header"))
 			c.Abort()
 			return
 		}
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		userInfo, err := am.authClient.ValidateToken(token)
+		if err != nil || !userInfo.Valid {
+			c.JSON(http.StatusUnauthorized, errResp("UNAUTHORIZED", "Invalid or expired token"))
+			c.Abort()
+			return
+		}
+		c.Set("userID", userInfo.User.ID)
 
+		userID, _ := c.Get("userID")
 		userIDInt, ok := userID.(int)
 		if !ok {
 			c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "invalid user ID type"))
@@ -115,14 +134,23 @@ func (am *AuthMiddleware) RequireTeamOwner() gin.HandlerFunc {
 // RequireTeamAdmin ensures user is owner or admin of the team
 func (am *AuthMiddleware) RequireTeamAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Extract user ID from JWT context
-		userID, exists := c.Get("userID")
-		if !exists {
-			c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "user ID not found in context"))
+		// Validate Authorization header with Auth Service and set user in context
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+			c.JSON(http.StatusUnauthorized, errResp("UNAUTHORIZED", "Missing or invalid authorization header"))
 			c.Abort()
 			return
 		}
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		userInfo, err := am.authClient.ValidateToken(token)
+		if err != nil || !userInfo.Valid {
+			c.JSON(http.StatusUnauthorized, errResp("UNAUTHORIZED", "Invalid or expired token"))
+			c.Abort()
+			return
+		}
+		c.Set("userID", userInfo.User.ID)
 
+		userID, _ := c.Get("userID")
 		userIDInt, ok := userID.(int)
 		if !ok {
 			c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "invalid user ID type"))

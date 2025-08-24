@@ -12,9 +12,6 @@ servers:
   - url: http://localhost:8083
     description: Local development server
 
-security:
-  - bearerAuth: []
-
 paths:
   /healthz:
     get:
@@ -26,7 +23,7 @@ paths:
   /teams:
     get:
       summary: List teams
-      description: Returns teams accessible to the caller.
+      description: Returns teams. In current implementation, this endpoint is public.
       parameters:
         - $ref: '#/components/parameters/Query'
         - $ref: '#/components/parameters/Limit'
@@ -44,7 +41,7 @@ paths:
 
     post:
       summary: Create a new team
-      description: Creates a new team with the caller as the owner.
+      description: Creates a new team with the caller as the owner. Public for now; add auth later.
       requestBody:
         required: true
         content:
@@ -79,7 +76,7 @@ paths:
 
     put:
       summary: Update a team
-      description: Updates team information. Only team owners can update.
+      description: Updates team information. Requires team membership (enforce role in middleware).
       parameters:
         - $ref: '#/components/parameters/TeamId'
       requestBody:
@@ -102,7 +99,7 @@ paths:
 
     delete:
       summary: Delete a team
-      description: Deletes a team. Only team owners can delete.
+      description: Deletes a team. Only team owners can delete (middleware enforced).
       parameters:
         - $ref: '#/components/parameters/TeamId'
       responses:
@@ -115,6 +112,7 @@ paths:
   /teams/{id}/members:
     get:
       summary: List team members
+      description: Requires team membership in middleware. Authorization header is required.
       parameters:
         - $ref: '#/components/parameters/TeamId'
       responses:
@@ -132,7 +130,7 @@ paths:
 
     post:
       summary: Add member to team
-      description: Adds a user to a team. Only team owners can add members.
+      description: Adds a user to a team. Only team owners/admins can add members (middleware).
       parameters:
         - $ref: '#/components/parameters/TeamId'
       requestBody:
@@ -156,7 +154,7 @@ paths:
   /teams/{id}/members/{userId}:
     delete:
       summary: Remove member from team
-      description: Removes a user from a team. Only team owners can remove members.
+      description: Removes a user from a team. Only team owners/admins can remove members (middleware).
       parameters:
         - $ref: '#/components/parameters/TeamId'
         - $ref: '#/components/parameters/UserId'
@@ -170,7 +168,7 @@ paths:
   /users/{userId}/teams:
     get:
       summary: List user's teams
-      description: Returns teams that the user belongs to.
+      description: Returns teams that the user belongs to. Public in current implementation.
       parameters:
         - $ref: '#/components/parameters/UserId'
       responses:

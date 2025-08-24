@@ -46,10 +46,18 @@ type TeamMember struct {
 }
 
 // GetTeam retrieves team information from Team Service
-func (tc *TeamClient) GetTeam(teamID int) (*Team, error) {
+func (tc *TeamClient) GetTeam(teamID int, bearerToken string) (*Team, error) {
 	url := fmt.Sprintf("%s/teams/%d", tc.baseURL, teamID)
 
-	resp, err := tc.httpClient.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	if bearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+bearerToken)
+	}
+
+	resp, err := tc.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call team service: %w", err)
 	}
@@ -71,40 +79,34 @@ func (tc *TeamClient) GetTeam(teamID int) (*Team, error) {
 	return &team, nil
 }
 
-// IsUserInTeam checks if a user is a member of a team
-func (tc *TeamClient) IsUserInTeam(userID, teamID int) (bool, error) {
-	url := fmt.Sprintf("%s/teams/%d/members", tc.baseURL, teamID)
-
-	resp, err := tc.httpClient.Get(url)
+// IsUserInTeam checks if a user is a member of a team using GetUserTeams
+func (tc *TeamClient) IsUserInTeam(userID, teamID int, bearerToken string) (bool, error) {
+	teams, err := tc.GetUserTeams(userID, bearerToken)
 	if err != nil {
-		return false, fmt.Errorf("failed to call team service: %w", err)
+		return false, err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return false, fmt.Errorf("team service returned status: %d", resp.StatusCode)
-	}
-
-	var members []TeamMember
-	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
-		return false, fmt.Errorf("failed to decode members response: %w", err) // Json format error
-	}
-
-	// Check if user is in the team
-	for _, member := range members {
-		if member.UserID == userID {
+	for _, t := range teams {
+		if t.ID == teamID {
 			return true, nil
 		}
 	}
-
 	return false, nil
 }
 
-// GetUserRoleInTeam gets the role of a user in a team
-func (tc *TeamClient) GetUserRoleInTeam(userID, teamID int) (string, error) {
+// GetUserRoleInTeam gets the role of a user in a team by scanning members
+func (tc *TeamClient) GetUserRoleInTeam(userID, teamID int, bearerToken string) (string, error) {
+	// Fall back to members list with Authorization if available
 	url := fmt.Sprintf("%s/teams/%d/members", tc.baseURL, teamID)
 
-	resp, err := tc.httpClient.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+	if bearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+bearerToken)
+	}
+
+	resp, err := tc.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to call team service: %w", err)
 	}
@@ -130,10 +132,18 @@ func (tc *TeamClient) GetUserRoleInTeam(userID, teamID int) (string, error) {
 }
 
 // GetUserTeams returns all teams that a user belongs to
-func (tc *TeamClient) GetUserTeams(userID int) ([]Team, error) {
+func (tc *TeamClient) GetUserTeams(userID int, bearerToken string) ([]Team, error) {
 	url := fmt.Sprintf("%s/users/%d/teams", tc.baseURL, userID)
 
-	resp, err := tc.httpClient.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	if bearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+bearerToken)
+	}
+
+	resp, err := tc.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call team service: %w", err)
 	}

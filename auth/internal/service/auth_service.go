@@ -164,6 +164,11 @@ func (s *AuthService) parseToken(tokenString string) (*models.Claims, error) {
 		}
 		return s.jwtSecret, nil
 	})
+	// ParseWithClaims:
+	// 1. parse tokenstring to header, payload, signature and store header and payload in models.Claims
+	// 2. func return the secretKey
+	// 3. secretKey + header.payload -> expected signature
+	// 4. signature == expected signature? token.valid=true :token.valid=false
 	if err != nil {
 		return nil, err
 	}
