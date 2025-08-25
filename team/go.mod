@@ -1,4 +1,4 @@
-module github.com/VerSysLabTin23/TodolistProject
+module github.com/VerSysLabTin23/TodolistProject/team
 
 go 1.24.2
 

@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/VerSysLabTin23/TodolistProject/task/internal/clients"
+	"github.com/VerSysLabTin23/TodolistProject/task/internal/events"
 	"github.com/VerSysLabTin23/TodolistProject/task/internal/middleware"
 	"github.com/VerSysLabTin23/TodolistProject/task/internal/models"
 	"github.com/VerSysLabTin23/TodolistProject/task/internal/repository"
@@ -14,11 +16,15 @@ import (
 type TaskHandlers struct {
 	repo       repository.TaskRepository
 	teamClient *clients.TeamClient
+	producer   *events.KafkaProducer
 }
 
 func NewTaskHandlers(r repository.TaskRepository, tc *clients.TeamClient) *TaskHandlers {
 	return &TaskHandlers{repo: r, teamClient: tc}
 }
+
+// SetProducer attaches a Kafka producer (optional)
+func (h *TaskHandlers) SetProducer(p *events.KafkaProducer) { h.producer = p }
 
 // Health check endpoint
 func (h *TaskHandlers) HealthCheck(c *gin.Context) {
@@ -342,6 +348,11 @@ func (h *TaskHandlers) UpdateTask(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.MapTask(*t))
+
+	// Emit task.updated event (best-effort)
+	if h.producer != nil {
+		_ = h.producer.TaskUpdated(context.Background(), t.ID, t.TeamID, userID, t.CreatorID, t.AssigneeID, map[string]any{"title": t.Title, "completed": t.Completed})
+	}
 }
 
 // DeleteTask deletes a task
@@ -459,6 +470,11 @@ func (h *TaskHandlers) SetAssignee(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.MapTask(*t))
+
+	// Emit task.updated event (assignee changed)
+	if h.producer != nil {
+		_ = h.producer.TaskUpdated(context.Background(), t.ID, t.TeamID, userID, t.CreatorID, t.AssigneeID, map[string]any{"assigneeId": t.AssigneeID})
+	}
 }
 
 // UpdateCompletion marks task completed or not
@@ -527,6 +543,11 @@ func (h *TaskHandlers) UpdateCompletion(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.MapTask(*t))
+
+	// Emit task.completed event
+	if h.producer != nil {
+		_ = h.producer.TaskCompleted(context.Background(), t.ID, t.TeamID, userID, t.CreatorID, t.AssigneeID, req.Completed)
+	}
 }
 
 // --- error helper ---

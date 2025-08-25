@@ -48,6 +48,9 @@ func main() {
 		c.JSON(200, gin.H{"valid": true, "user": gin.H{"id": userID, "username": username, "role": role}})
 	})
 
+	// Internal service endpoint for getting user info (no auth required for simplicity in dev)
+	r.GET("/internal/users/:id", h.GetUser)
+
 	auth := r.Group("/auth")
 	{
 		auth.POST("/register", h.Register)
