@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/VerSysLabTin23/TodolistProject/task/internal/clients"
+	"github.com/VerSysLabTin23/TodolistProject/task/internal/events"
 	"github.com/VerSysLabTin23/TodolistProject/task/internal/handlers"
 	"github.com/VerSysLabTin23/TodolistProject/task/internal/middleware"
 	"github.com/VerSysLabTin23/TodolistProject/task/internal/repository"
@@ -32,9 +33,12 @@ func main() {
 
 	// --- wire repos/handlers ---
 	repo := repository.NewTaskRepository(gdb)
+	producer := events.NewKafkaProducer()
 	teamClient := clients.NewTeamClient()
 	authClient := clients.NewAuthClient()
 	h := handlers.NewTaskHandlers(repo, teamClient)
+	// Attach producer to handlers via package-level setter (simple for now)
+	h.SetProducer(producer)
 	auth := middleware.NewAuthMiddleware(authClient)
 
 	// --- router ---
