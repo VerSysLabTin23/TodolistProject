@@ -28,21 +28,21 @@ func NewAuthClient() *AuthClient {
 
 func (c *AuthClient) GetUserByID(userID int) (*User, error) {
 	url := fmt.Sprintf("%s/internal/users/%d", c.baseURL, userID)
-	
+
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("auth service returned status: %d", resp.StatusCode)
 	}
-	
+
 	var user User
 	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
 		return nil, fmt.Errorf("failed to decode user response: %w", err)
 	}
-	
+
 	return &user, nil
 }

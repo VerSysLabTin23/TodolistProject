@@ -1,12 +1,14 @@
 package service
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/crypto/bcrypt" // Keep for backward compatibility
 
 	"github.com/VerSysLabTin23/TodolistProject/auth/internal/models"
 	"github.com/VerSysLabTin23/TodolistProject/auth/internal/repository"
@@ -41,6 +43,13 @@ func NewAuthService(repo repository.UserRepository) *AuthService {
 	return &AuthService{repo: repo, jwtSecret: []byte(jwtSecret), accessTTL: accessTTL, refreshTTL: refreshTTL}
 }
 
+// hashPassword hashes a password with SHA256
+func (s *AuthService) hashPassword(password string) string {
+	hash := sha256.New()
+	hash.Write([]byte(password))
+	return hex.EncodeToString(hash.Sum(nil))
+}
+
 func (s *AuthService) RegisterUser(req models.RegisterRequest) (*models.User, error) {
 	exists, err := s.repo.ExistsByUsername(req.Username)
 	if err != nil {
@@ -56,11 +65,11 @@ func (s *AuthService) RegisterUser(req models.RegisterRequest) (*models.User, er
 	if exists {
 		return nil, errors.New("email already exists")
 	}
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, err
-	}
-	user := &models.User{Username: req.Username, Email: req.Email, PasswordHash: string(hashedPassword), FirstName: req.FirstName, LastName: req.LastName, Role: "user", IsActive: true}
+
+	// Hash password with SHA256
+	hashedPassword := s.hashPassword(req.Password)
+
+	user := &models.User{Username: req.Username, Email: req.Email, PasswordHash: hashedPassword, FirstName: req.FirstName, LastName: req.LastName, Role: "user", IsActive: true}
 	if err := s.repo.Create(user); err != nil {
 		return nil, err
 	}
@@ -75,7 +84,7 @@ func (s *AuthService) AuthenticateUser(req models.LoginRequest) (*models.LoginRe
 	if !user.IsActive {
 		return nil, errors.New("user account is deactivated")
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+	if !s.VerifyPassword(req.Password, user.PasswordHash) {
 		return nil, errors.New("invalid credentials")
 	}
 	accessToken, err := s.generateAccessToken(user)
@@ -127,14 +136,14 @@ func (s *AuthService) ChangePassword(userID int, req models.ChangePasswordReques
 	if err != nil {
 		return errors.New("user not found")
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.CurrentPassword)); err != nil {
+	if !s.VerifyPassword(req.CurrentPassword, user.PasswordHash) {
 		return errors.New("current password is incorrect")
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-	user.PasswordHash = string(hash)
+
+	// Hash new password with SHA256
+	hashedPassword := s.hashPassword(req.NewPassword)
+	user.PasswordHash = hashedPassword
+
 	return s.repo.Update(user)
 }
 
@@ -179,13 +188,17 @@ func (s *AuthService) parseToken(tokenString string) (*models.Claims, error) {
 }
 
 func (s *AuthService) HashPassword(password string) (string, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return "", err
-	}
-	return string(hash), nil
+	return s.hashPassword(password), nil
 }
 
 func (s *AuthService) VerifyPassword(password, hash string) bool {
-	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
+	// Check if this is a SHA256 hash (hex string of length 64)
+	if len(hash) == 64 {
+		// New SHA256 hash
+		computedHash := s.hashPassword(password)
+		return computedHash == hash
+	} else {
+		// Legacy bcrypt hash - try to verify with bcrypt
+		return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
+	}
 }
