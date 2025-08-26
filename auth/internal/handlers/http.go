@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"context"
+	"log"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/VerSysLabTin23/TodolistProject/auth/internal/events"
 	"github.com/VerSysLabTin23/TodolistProject/auth/internal/models"
 	"github.com/VerSysLabTin23/TodolistProject/auth/internal/repository"
 	"github.com/VerSysLabTin23/TodolistProject/auth/internal/service"
@@ -15,10 +18,11 @@ import (
 type AuthHandlers struct {
 	authService *service.AuthService
 	userRepo    repository.UserRepository
+	producer    *events.KafkaProducer
 }
 
-func NewAuthHandlers(authService *service.AuthService, userRepo repository.UserRepository) *AuthHandlers {
-	return &AuthHandlers{authService: authService, userRepo: userRepo}
+func NewAuthHandlers(authService *service.AuthService, userRepo repository.UserRepository, producer *events.KafkaProducer) *AuthHandlers {
+	return &AuthHandlers{authService: authService, userRepo: userRepo, producer: producer}
 }
 
 func (h *AuthHandlers) HealthCheck(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) }
@@ -41,6 +45,19 @@ func (h *AuthHandlers) Register(c *gin.Context) {
 		}
 		return
 	}
+
+	// Send user.created event
+	if h.producer != nil {
+		log.Printf("Sending user.created event for user ID: %d, email: %s, username: %s", user.ID, user.Email, user.Username)
+		if err := h.producer.UserCreated(context.Background(), user.ID, user.Email, user.Username); err != nil {
+			log.Printf("Failed to send user.created event: %v", err)
+		} else {
+			log.Printf("Successfully sent user.created event")
+		}
+	} else {
+		log.Printf("Kafka producer is nil, skipping user.created event")
+	}
+
 	c.JSON(http.StatusCreated, user.ToUserResponse())
 }
 

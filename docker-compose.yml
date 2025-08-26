@@ -198,6 +198,7 @@ services:
       JWT_SECRET: "your-secret-key-change-in-production"
       JWT_ACCESS_TTL: "15m"
       JWT_REFRESH_TTL: "168h"
+      KAFKA_BROKERS: "dev_kafka:9092"
     ports:
       - "8084:8084"
     networks: [app-net]

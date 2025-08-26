@@ -9,6 +9,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 
+	"github.com/VerSysLabTin23/TodolistProject/auth/internal/events"
 	"github.com/VerSysLabTin23/TodolistProject/auth/internal/handlers"
 	"github.com/VerSysLabTin23/TodolistProject/auth/internal/middleware"
 	"github.com/VerSysLabTin23/TodolistProject/auth/internal/repository"
@@ -33,7 +34,8 @@ func main() {
 
 	userRepo := repository.NewUserRepository(db)
 	authService := service.NewAuthService(userRepo)
-	h := handlers.NewAuthHandlers(authService, userRepo)
+	producer := events.NewKafkaProducer()
+	h := handlers.NewAuthHandlers(authService, userRepo, producer)
 	jwt := middleware.NewJWTMiddleware(authService)
 
 	r := gin.Default()
