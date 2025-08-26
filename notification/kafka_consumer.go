@@ -29,16 +29,27 @@ func startKafkaConsumer(ctx context.Context, authClient *AuthClient, emailSender
 	}
 	topics := []string{"task.updated", "task.completed"}
 
+	log.Printf("[kafka] consumer starting: brokers=%s topics=%v", brokers, topics)
+
 	// For simplicity, use a single reader per topic in goroutines
 	stopFns := make([]func(), 0, len(topics))
 	for _, tp := range topics {
 		tp := tp
-		r := kafka.NewReader(kafka.ReaderConfig{Brokers: []string{brokers}, GroupID: "notification-service", Topic: tp})
+		readerLogger := log.New(os.Stdout, "[kafka-reader] ", 0)
+		r := kafka.NewReader(kafka.ReaderConfig{
+			Brokers:     []string{brokers},
+			GroupID:     "notification-service",
+			Topic:       tp,
+			Logger:      readerLogger,
+			ErrorLogger: readerLogger,
+		})
+		log.Printf("[kafka] reader created for topic=%s", tp)
 		go func() {
 			for {
 				m, err := r.ReadMessage(ctx)
 				if err != nil {
 					if ctx.Err() != nil {
+						log.Printf("[kafka] context done for topic=%s", tp)
 						return
 					}
 					log.Printf("kafka read error on %s: %v", tp, err)

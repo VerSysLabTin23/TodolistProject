@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -351,7 +352,11 @@ func (h *TaskHandlers) UpdateTask(c *gin.Context) {
 
 	// Emit task.updated event (best-effort)
 	if h.producer != nil {
-		_ = h.producer.TaskUpdated(context.Background(), t.ID, t.TeamID, userID, t.CreatorID, t.AssigneeID, map[string]any{"title": t.Title, "completed": t.Completed})
+		if err := h.producer.TaskUpdated(context.Background(), t.ID, t.TeamID, userID, t.CreatorID, t.AssigneeID, map[string]any{"title": t.Title, "completed": t.Completed}); err != nil {
+			log.Printf("kafka publish task.updated failed: %v", err)
+		} else {
+			log.Printf("kafka published task.updated for task=%d team=%d", t.ID, t.TeamID)
+		}
 	}
 }
 
@@ -473,7 +478,11 @@ func (h *TaskHandlers) SetAssignee(c *gin.Context) {
 
 	// Emit task.updated event (assignee changed)
 	if h.producer != nil {
-		_ = h.producer.TaskUpdated(context.Background(), t.ID, t.TeamID, userID, t.CreatorID, t.AssigneeID, map[string]any{"assigneeId": t.AssigneeID})
+		if err := h.producer.TaskUpdated(context.Background(), t.ID, t.TeamID, userID, t.CreatorID, t.AssigneeID, map[string]any{"assigneeId": t.AssigneeID}); err != nil {
+			log.Printf("kafka publish task.updated (assignee) failed: %v", err)
+		} else {
+			log.Printf("kafka published task.updated (assignee) for task=%d team=%d", t.ID, t.TeamID)
+		}
 	}
 }
 
@@ -546,7 +555,11 @@ func (h *TaskHandlers) UpdateCompletion(c *gin.Context) {
 
 	// Emit task.completed event
 	if h.producer != nil {
-		_ = h.producer.TaskCompleted(context.Background(), t.ID, t.TeamID, userID, t.CreatorID, t.AssigneeID, req.Completed)
+		if err := h.producer.TaskCompleted(context.Background(), t.ID, t.TeamID, userID, t.CreatorID, t.AssigneeID, req.Completed); err != nil {
+			log.Printf("kafka publish task.completed failed: %v", err)
+		} else {
+			log.Printf("kafka published task.completed for task=%d team=%d completed=%v", t.ID, t.TeamID, req.Completed)
+		}
 	}
 }
 

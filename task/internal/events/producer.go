@@ -10,7 +10,8 @@ import (
 )
 
 type KafkaProducer struct {
-	writer *kafka.Writer
+	brokers string
+	writers map[string]*kafka.Writer
 }
 
 type TaskEvent struct {
@@ -29,32 +30,48 @@ func NewKafkaProducer() *KafkaProducer {
 	if brokers == "" {
 		brokers = "dev_kafka:9092"
 	}
-	return &KafkaProducer{
-		writer: &kafka.Writer{
-			Addr:         kafka.TCP(brokers),
-			RequiredAcks: kafka.RequireOne,
-			Async:        true,
-		},
-	}
+	return &KafkaProducer{brokers: brokers, writers: make(map[string]*kafka.Writer)}
 }
 
 func (p *KafkaProducer) Close() error {
-	if p == nil || p.writer == nil {
+	if p == nil {
 		return nil
 	}
-	return p.writer.Close()
+	var firstErr error
+	for _, w := range p.writers {
+		if w != nil {
+			if err := w.Close(); err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+	return firstErr
+}
+
+func (p *KafkaProducer) getWriter(topic string) *kafka.Writer {
+	if w, ok := p.writers[topic]; ok && w != nil {
+		return w
+	}
+	w := &kafka.Writer{
+		Addr:         kafka.TCP(p.brokers),
+		Topic:        topic,
+		RequiredAcks: kafka.RequireOne,
+		Async:        true,
+	}
+	p.writers[topic] = w
+	return w
 }
 
 func (p *KafkaProducer) publish(ctx context.Context, topic string, evt TaskEvent) error {
-	if p == nil || p.writer == nil {
+	if p == nil {
 		return nil
 	}
 	b, err := json.Marshal(evt)
 	if err != nil {
 		return err
 	}
-	return p.writer.WriteMessages(ctx, kafka.Message{
-		Topic: topic,
+	w := p.getWriter(topic)
+	return w.WriteMessages(ctx, kafka.Message{
 		Key:   []byte("task:" + itoa(evt.TaskID)),
 		Value: b,
 		Time:  time.Now(),
