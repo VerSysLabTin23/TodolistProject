@@ -229,7 +229,7 @@ func sendTaskEmailToUser(authClient *AuthClient, emailSender *EmailSender, userI
 	}
 
 	// Create email subject and body
-	subject := "Task Update: " + eventType
+	subject := eventType
 	body := createTaskEmailBody(eventType, event, user.Username)
 
 	// Send email
@@ -250,7 +250,7 @@ func sendTeamEmailToUser(authClient *AuthClient, emailSender *EmailSender, userI
 	}
 
 	// Create email subject and body
-	subject := "Team Update: " + eventType
+	subject := eventType
 	body := createTeamEmailBody(eventType, event, user.Username)
 
 	// Send email
@@ -271,7 +271,7 @@ func sendTeamMemberEmailToUser(authClient *AuthClient, emailSender *EmailSender,
 	}
 
 	// Create email subject and body
-	subject := "Team Membership Update: " + eventType
+	subject := eventType
 	body := createTeamMemberEmailBody(eventType, event, user.Username)
 
 	// Send email
