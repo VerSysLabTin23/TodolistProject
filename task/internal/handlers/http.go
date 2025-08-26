@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/VerSysLabTin23/TodolistProject/task/internal/clients"
+	"github.com/VerSysLabTin23/TodolistProject/task/internal/events"
 	"github.com/VerSysLabTin23/TodolistProject/task/internal/middleware"
 	"github.com/VerSysLabTin23/TodolistProject/task/internal/models"
 	"github.com/VerSysLabTin23/TodolistProject/task/internal/repository"
@@ -14,11 +16,15 @@ import (
 type TaskHandlers struct {
 	repo       repository.TaskRepository
 	teamClient *clients.TeamClient
+	producer   *events.KafkaProducer
 }
 
 func NewTaskHandlers(r repository.TaskRepository, tc *clients.TeamClient) *TaskHandlers {
 	return &TaskHandlers{repo: r, teamClient: tc}
 }
+
+// SetProducer attaches a Kafka producer (optional)
+func (h *TaskHandlers) SetProducer(p *events.KafkaProducer) { h.producer = p }
 
 // Health check endpoint
 func (h *TaskHandlers) HealthCheck(c *gin.Context) {
@@ -33,8 +39,12 @@ func (h *TaskHandlers) ListTasksByTeam(c *gin.Context) {
 		return
 	}
 
+	// Bearer token from middleware
+	bt, _ := c.Get("authToken")
+	token, _ := bt.(string)
+
 	// Verify team exists by calling Team Service
-	team, err := h.teamClient.GetTeam(teamID)
+	team, err := h.teamClient.GetTeam(teamID, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team"))
 		return
@@ -58,7 +68,7 @@ func (h *TaskHandlers) ListTasksByTeam(c *gin.Context) {
 	}
 
 	// Verify user is member of the team
-	isMember, err := h.teamClient.IsUserInTeam(userID, teamID)
+	isMember, err := h.teamClient.IsUserInTeam(userID, teamID, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team membership"))
 		return
@@ -85,8 +95,12 @@ func (h *TaskHandlers) CreateTaskInTeam(c *gin.Context) {
 		return
 	}
 
+	// Bearer token from middleware
+	bt, _ := c.Get("authToken")
+	token, _ := bt.(string)
+
 	// Verify team exists by calling Team Service
-	team, err := h.teamClient.GetTeam(teamID)
+	team, err := h.teamClient.GetTeam(teamID, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team"))
 		return
@@ -129,7 +143,7 @@ func (h *TaskHandlers) CreateTaskInTeam(c *gin.Context) {
 	}
 
 	// Verify user is member of the team
-	isMember, err := h.teamClient.IsUserInTeam(creatorID, teamID)
+	isMember, err := h.teamClient.IsUserInTeam(creatorID, teamID, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team membership"))
 		return
@@ -156,6 +170,16 @@ func (h *TaskHandlers) CreateTaskInTeam(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, models.MapTask(*t))
+
+	// Emit task.created event (best-effort)
+	if h.producer != nil {
+		_ = h.producer.TaskCreated(context.Background(), t.ID, t.TeamID, creatorID, t.CreatorID, t.AssigneeID, map[string]any{
+			"title":       t.Title,
+			"description": t.Description,
+			"priority":    string(t.Priority),
+			"due":         t.Due.Format("2006-01-02"),
+		})
+	}
 }
 
 // ListTasksAcrossTeams returns tasks restricted to teams of the current user
@@ -172,7 +196,11 @@ func (h *TaskHandlers) ListTasksAcrossTeams(c *gin.Context) {
 		return
 	}
 
-	teams, err := h.teamClient.GetUserTeams(userID)
+	// Bearer token from middleware
+	bt, _ := c.Get("authToken")
+	token, _ := bt.(string)
+
+	teams, err := h.teamClient.GetUserTeams(userID, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to fetch user teams"))
 		return
@@ -221,8 +249,12 @@ func (h *TaskHandlers) GetTask(c *gin.Context) {
 		return
 	}
 
+	// Bearer token from middleware
+	bt, _ := c.Get("authToken")
+	token, _ := bt.(string)
+
 	// Verify user is member of the team
-	isMember, err := h.teamClient.IsUserInTeam(userID, t.TeamID)
+	isMember, err := h.teamClient.IsUserInTeam(userID, t.TeamID, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team membership"))
 		return
@@ -266,8 +298,12 @@ func (h *TaskHandlers) UpdateTask(c *gin.Context) {
 		return
 	}
 
+	// Bearer token from middleware
+	bt, _ := c.Get("authToken")
+	token, _ := bt.(string)
+
 	// Verify user is member of the team
-	isMember, err := h.teamClient.IsUserInTeam(userID, t.TeamID)
+	isMember, err := h.teamClient.IsUserInTeam(userID, t.TeamID, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team membership"))
 		return
@@ -305,12 +341,10 @@ func (h *TaskHandlers) UpdateTask(c *gin.Context) {
 	if req.AssigneeID != nil {
 		// Verify assignee is member of the team
 		if *req.AssigneeID != 0 {
-			isAssigneeMember, err := h.teamClient.IsUserInTeam(*req.AssigneeID, t.TeamID)
-			if err != nil {
+			if ok, err := h.teamClient.IsUserInTeam(*req.AssigneeID, t.TeamID, token); err != nil {
 				c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify assignee team membership"))
 				return
-			}
-			if !isAssigneeMember {
+			} else if !ok {
 				c.JSON(http.StatusBadRequest, errResp("BAD_REQUEST", "assignee must be a member of the team"))
 				return
 			}
@@ -324,6 +358,11 @@ func (h *TaskHandlers) UpdateTask(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.MapTask(*t))
+
+	// Emit task.updated event (best-effort)
+	if h.producer != nil {
+		_ = h.producer.TaskUpdated(context.Background(), t.ID, t.TeamID, userID, t.CreatorID, t.AssigneeID, map[string]any{"title": t.Title, "completed": t.Completed})
+	}
 }
 
 // DeleteTask deletes a task
@@ -351,8 +390,12 @@ func (h *TaskHandlers) DeleteTask(c *gin.Context) {
 		return
 	}
 
+	// Bearer token from middleware
+	bt, _ := c.Get("authToken")
+	token, _ := bt.(string)
+
 	// Verify user is member of the team
-	isMember, err := h.teamClient.IsUserInTeam(userID, t.TeamID)
+	isMember, err := h.teamClient.IsUserInTeam(userID, t.TeamID, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team membership"))
 		return
@@ -371,6 +414,13 @@ func (h *TaskHandlers) DeleteTask(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+
+	// Emit task.deleted event (best-effort)
+	if h.producer != nil {
+		_ = h.producer.TaskDeleted(context.Background(), t.ID, t.TeamID, userID, t.CreatorID, t.AssigneeID, map[string]any{
+			"title": t.Title,
+		})
+	}
 }
 
 // SetAssignee sets or clears assignee
@@ -405,8 +455,12 @@ func (h *TaskHandlers) SetAssignee(c *gin.Context) {
 		return
 	}
 
+	// Bearer token from middleware
+	bt, _ := c.Get("authToken")
+	token, _ := bt.(string)
+
 	// Verify user is member of the team
-	isMember, err := h.teamClient.IsUserInTeam(userID, task.TeamID)
+	isMember, err := h.teamClient.IsUserInTeam(userID, task.TeamID, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team membership"))
 		return
@@ -433,6 +487,11 @@ func (h *TaskHandlers) SetAssignee(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.MapTask(*t))
+
+	// Emit task.updated event (assignee changed)
+	if h.producer != nil {
+		_ = h.producer.TaskUpdated(context.Background(), t.ID, t.TeamID, userID, t.CreatorID, t.AssigneeID, map[string]any{"assigneeId": t.AssigneeID})
+	}
 }
 
 // UpdateCompletion marks task completed or not
@@ -469,8 +528,12 @@ func (h *TaskHandlers) UpdateCompletion(c *gin.Context) {
 		return
 	}
 
+	// Bearer token from middleware
+	bt, _ := c.Get("authToken")
+	token, _ := bt.(string)
+
 	// Verify user is member of the team
-	isMember, err := h.teamClient.IsUserInTeam(userID, task.TeamID)
+	isMember, err := h.teamClient.IsUserInTeam(userID, task.TeamID, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", "failed to verify team membership"))
 		return
@@ -497,6 +560,11 @@ func (h *TaskHandlers) UpdateCompletion(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.MapTask(*t))
+
+	// Emit task.completed event
+	if h.producer != nil {
+		_ = h.producer.TaskCompleted(context.Background(), t.ID, t.TeamID, userID, t.CreatorID, t.AssigneeID, req.Completed)
+	}
 }
 
 // --- error helper ---

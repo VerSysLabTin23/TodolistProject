@@ -13,7 +13,7 @@ RUN go mod download
 COPY . .
 
 # Build the Go app
-RUN go build -o team-service
+RUN go build -o team-service ./cmd/team-service
 
 # Run the binary
 CMD ["./team-service"]
