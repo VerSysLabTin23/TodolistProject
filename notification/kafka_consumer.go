@@ -29,12 +29,36 @@ type UserEvent struct {
 	Payload   interface{} `json:"payload,omitempty"`
 }
 
+type TeamEvent struct {
+	EventType string      `json:"eventType"`
+	TeamID    int         `json:"teamId"`
+	ActorID   int         `json:"actorId"`
+	OwnerID   int         `json:"ownerId"`
+	Timestamp time.Time   `json:"timestamp"`
+	Payload   interface{} `json:"payload,omitempty"`
+}
+
+type TeamMemberEvent struct {
+	EventType string      `json:"eventType"`
+	TeamID    int         `json:"teamId"`
+	UserID    int         `json:"userId"`
+	ActorID   int         `json:"actorId"`
+	Role      string      `json:"role,omitempty"`
+	Timestamp time.Time   `json:"timestamp"`
+	Payload   interface{} `json:"payload,omitempty"`
+}
+
 func startKafkaConsumer(ctx context.Context, authClient *AuthClient, emailSender *EmailSender) func() {
 	brokers := os.Getenv("KAFKA_BROKERS")
 	if brokers == "" {
 		brokers = "dev_kafka:9092"
 	}
-	topics := []string{"task.updated", "task.completed", "user.created"}
+	topics := []string{
+		"task.created", "task.updated", "task.deleted", "task.completed",
+		"team.created", "team.updated", "team.deleted",
+		"team.member_added", "team.member_removed", "team.member_role_updated",
+		"user.created",
+	}
 
 	log.Printf("Starting Kafka consumer with brokers: %s, topics: %v", brokers, topics)
 
@@ -61,13 +85,29 @@ func startKafkaConsumer(ctx context.Context, authClient *AuthClient, emailSender
 
 				// Parse the event based on topic
 				switch tp {
-				case "task.updated", "task.completed":
+				case "task.created", "task.updated", "task.deleted", "task.completed":
 					var event TaskEvent
 					if err := json.Unmarshal(m.Value, &event); err != nil {
 						log.Printf("failed to parse task event: %v", err)
 						continue
 					}
 					processTaskEvent(authClient, emailSender, tp, event)
+
+				case "team.created", "team.updated", "team.deleted":
+					var event TeamEvent
+					if err := json.Unmarshal(m.Value, &event); err != nil {
+						log.Printf("failed to parse team event: %v", err)
+						continue
+					}
+					processTeamEvent(authClient, emailSender, tp, event)
+
+				case "team.member_added", "team.member_removed", "team.member_role_updated":
+					var event TeamMemberEvent
+					if err := json.Unmarshal(m.Value, &event); err != nil {
+						log.Printf("failed to parse team member event: %v", err)
+						continue
+					}
+					processTeamMemberEvent(authClient, emailSender, tp, event)
 
 				case "user.created":
 					var event UserEvent
@@ -94,7 +134,7 @@ func processTaskEvent(authClient *AuthClient, emailSender *EmailSender, eventTyp
 
 	// Send email to creator
 	creatorEmailSent := false
-	if err := sendEmailToUser(authClient, emailSender, event.CreatorID, eventType, event); err != nil {
+	if err := sendTaskEmailToUser(authClient, emailSender, event.CreatorID, eventType, event); err != nil {
 		log.Printf("failed to send email to creator %d: %v", event.CreatorID, err)
 	} else {
 		creatorEmailSent = true
@@ -103,7 +143,7 @@ func processTaskEvent(authClient *AuthClient, emailSender *EmailSender, eventTyp
 	// Send email to assignee if exists
 	assigneeEmailSent := false
 	if event.AssigneeID != nil && *event.AssigneeID != event.CreatorID {
-		if err := sendEmailToUser(authClient, emailSender, *event.AssigneeID, eventType, event); err != nil {
+		if err := sendTaskEmailToUser(authClient, emailSender, *event.AssigneeID, eventType, event); err != nil {
 			log.Printf("failed to send email to assignee %d: %v", *event.AssigneeID, err)
 		} else {
 			assigneeEmailSent = true
@@ -115,6 +155,37 @@ func processTaskEvent(authClient *AuthClient, emailSender *EmailSender, eventTyp
 		eventType,
 		map[bool]string{true: "sent", false: "failed"}[creatorEmailSent],
 		map[bool]string{true: "sent", false: "failed"}[assigneeEmailSent])
+}
+
+func processTeamEvent(authClient *AuthClient, emailSender *EmailSender, eventType string, event TeamEvent) {
+	log.Printf("Parsed team event: TeamID=%d, ActorID=%d, OwnerID=%d", event.TeamID, event.ActorID, event.OwnerID)
+
+	// Send email to team owner
+	if err := sendTeamEmailToUser(authClient, emailSender, event.OwnerID, eventType, event); err != nil {
+		log.Printf("failed to send team email to owner %d: %v", event.OwnerID, err)
+	} else {
+		log.Printf("Team event %s email sent to owner %d", eventType, event.OwnerID)
+	}
+}
+
+func processTeamMemberEvent(authClient *AuthClient, emailSender *EmailSender, eventType string, event TeamMemberEvent) {
+	log.Printf("Parsed team member event: TeamID=%d, UserID=%d, ActorID=%d", event.TeamID, event.UserID, event.ActorID)
+
+	// Send email to the affected user
+	if err := sendTeamMemberEmailToUser(authClient, emailSender, event.UserID, eventType, event); err != nil {
+		log.Printf("failed to send team member email to user %d: %v", event.UserID, err)
+	} else {
+		log.Printf("Team member event %s email sent to user %d", eventType, event.UserID)
+	}
+
+	// Also notify the actor if different from the affected user
+	if event.ActorID != event.UserID {
+		if err := sendTeamMemberEmailToUser(authClient, emailSender, event.ActorID, eventType, event); err != nil {
+			log.Printf("failed to send team member email to actor %d: %v", event.ActorID, err)
+		} else {
+			log.Printf("Team member event %s email sent to actor %d", eventType, event.ActorID)
+		}
+	}
 }
 
 func processUserEvent(emailSender *EmailSender, eventType string, event UserEvent) {
@@ -150,7 +221,7 @@ func createWelcomeEmailBody(username string, userID int) string {
 	return fmt.Sprintf("Hello %s,\n\nWelcome to Todo App! 🎉\n\nYour account has been successfully created with User ID: %d\n\nWe're excited to have you on board. You can now:\n- Create and manage tasks\n- Join teams and collaborate\n- Track your progress\n\nBest regards,\nTodo App Team", username, userID)
 }
 
-func sendEmailToUser(authClient *AuthClient, emailSender *EmailSender, userID int, eventType string, event TaskEvent) error {
+func sendTaskEmailToUser(authClient *AuthClient, emailSender *EmailSender, userID int, eventType string, event TaskEvent) error {
 	// Get user info from auth service
 	user, err := authClient.GetUserByID(userID)
 	if err != nil {
@@ -159,7 +230,7 @@ func sendEmailToUser(authClient *AuthClient, emailSender *EmailSender, userID in
 
 	// Create email subject and body
 	subject := "Task Update: " + eventType
-	body := createEmailBody(eventType, event, user.Username)
+	body := createTaskEmailBody(eventType, event, user.Username)
 
 	// Send email
 	if err := emailSender.Send(user.Email, subject, body); err != nil {
@@ -171,10 +242,58 @@ func sendEmailToUser(authClient *AuthClient, emailSender *EmailSender, userID in
 	return nil
 }
 
-func createEmailBody(eventType string, event TaskEvent, username string) string {
+func sendTeamEmailToUser(authClient *AuthClient, emailSender *EmailSender, userID int, eventType string, event TeamEvent) error {
+	// Get user info from auth service
+	user, err := authClient.GetUserByID(userID)
+	if err != nil {
+		return err
+	}
+
+	// Create email subject and body
+	subject := "Team Update: " + eventType
+	body := createTeamEmailBody(eventType, event, user.Username)
+
+	// Send email
+	if err := emailSender.Send(user.Email, subject, body); err != nil {
+		return err
+	}
+
+	// Log successful email sending
+	log.Printf("Team email sent successfully to %s (%s) for %s event", user.Email, user.Username, eventType)
+	return nil
+}
+
+func sendTeamMemberEmailToUser(authClient *AuthClient, emailSender *EmailSender, userID int, eventType string, event TeamMemberEvent) error {
+	// Get user info from auth service
+	user, err := authClient.GetUserByID(userID)
+	if err != nil {
+		return err
+	}
+
+	// Create email subject and body
+	subject := "Team Membership Update: " + eventType
+	body := createTeamMemberEmailBody(eventType, event, user.Username)
+
+	// Send email
+	if err := emailSender.Send(user.Email, subject, body); err != nil {
+		return err
+	}
+
+	// Log successful email sending
+	log.Printf("Team member email sent successfully to %s (%s) for %s event", user.Email, user.Username, eventType)
+	return nil
+}
+
+func createTaskEmailBody(eventType string, event TaskEvent, username string) string {
 	switch eventType {
+	case "task.created":
+		return fmt.Sprintf("Hello %s,\n\nA new task has been created:\n- Task ID: %d\n- Team ID: %d\n- Created by: User %d\n- Timestamp: %s\n\nBest regards,\nTodo App",
+			username, event.TaskID, event.TeamID, event.ActorID, event.Timestamp)
 	case "task.updated":
 		return fmt.Sprintf("Hello %s,\n\nA task has been updated:\n- Task ID: %d\n- Team ID: %d\n- Updated by: User %d\n- Timestamp: %s\n\nBest regards,\nTodo App",
+			username, event.TaskID, event.TeamID, event.ActorID, event.Timestamp)
+	case "task.deleted":
+		return fmt.Sprintf("Hello %s,\n\nA task has been deleted:\n- Task ID: %d\n- Team ID: %d\n- Deleted by: User %d\n- Timestamp: %s\n\nBest regards,\nTodo App",
 			username, event.TaskID, event.TeamID, event.ActorID, event.Timestamp)
 	case "task.completed":
 		completed := "completed"
@@ -190,5 +309,46 @@ func createEmailBody(eventType string, event TaskEvent, username string) string 
 	default:
 		return fmt.Sprintf("Hello %s,\n\nA task event occurred:\n- Event: %s\n- Task ID: %d\n- Team ID: %d\n- Actor: User %d\n- Timestamp: %s\n\nBest regards,\nTodo App",
 			username, eventType, event.TaskID, event.TeamID, event.ActorID, event.Timestamp)
+	}
+}
+
+func createTeamEmailBody(eventType string, event TeamEvent, username string) string {
+	var teamName string
+	if payload, ok := event.Payload.(map[string]interface{}); ok {
+		if name, exists := payload["name"].(string); exists {
+			teamName = name
+		}
+	}
+
+	switch eventType {
+	case "team.created":
+		return fmt.Sprintf("Hello %s,\n\nA new team has been created:\n- Team ID: %d\n- Team Name: %s\n- Created by: User %d\n- Timestamp: %s\n\nBest regards,\nTodo App",
+			username, event.TeamID, teamName, event.ActorID, event.Timestamp)
+	case "team.updated":
+		return fmt.Sprintf("Hello %s,\n\nYour team has been updated:\n- Team ID: %d\n- Team Name: %s\n- Updated by: User %d\n- Timestamp: %s\n\nBest regards,\nTodo App",
+			username, event.TeamID, teamName, event.ActorID, event.Timestamp)
+	case "team.deleted":
+		return fmt.Sprintf("Hello %s,\n\nYour team has been deleted:\n- Team ID: %d\n- Team Name: %s\n- Deleted by: User %d\n- Timestamp: %s\n\nBest regards,\nTodo App",
+			username, event.TeamID, teamName, event.ActorID, event.Timestamp)
+	default:
+		return fmt.Sprintf("Hello %s,\n\nA team event occurred:\n- Event: %s\n- Team ID: %d\n- Actor: User %d\n- Timestamp: %s\n\nBest regards,\nTodo App",
+			username, eventType, event.TeamID, event.ActorID, event.Timestamp)
+	}
+}
+
+func createTeamMemberEmailBody(eventType string, event TeamMemberEvent, username string) string {
+	switch eventType {
+	case "team.member_added":
+		return fmt.Sprintf("Hello %s,\n\nYou have been added to a team:\n- Team ID: %d\n- Role: %s\n- Added by: User %d\n- Timestamp: %s\n\nBest regards,\nTodo App",
+			username, event.TeamID, event.Role, event.ActorID, event.Timestamp)
+	case "team.member_removed":
+		return fmt.Sprintf("Hello %s,\n\nYou have been removed from a team:\n- Team ID: %d\n- Removed by: User %d\n- Timestamp: %s\n\nBest regards,\nTodo App",
+			username, event.TeamID, event.ActorID, event.Timestamp)
+	case "team.member_role_updated":
+		return fmt.Sprintf("Hello %s,\n\nYour role in a team has been updated:\n- Team ID: %d\n- New Role: %s\n- Updated by: User %d\n- Timestamp: %s\n\nBest regards,\nTodo App",
+			username, event.TeamID, event.Role, event.ActorID, event.Timestamp)
+	default:
+		return fmt.Sprintf("Hello %s,\n\nA team membership event occurred:\n- Event: %s\n- Team ID: %d\n- User ID: %d\n- Actor: User %d\n- Timestamp: %s\n\nBest regards,\nTodo App",
+			username, eventType, event.TeamID, event.UserID, event.ActorID, event.Timestamp)
 	}
 }

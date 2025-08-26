@@ -57,6 +57,8 @@ services:
         condition: service_healthy
       team-dbmate:
         condition: service_completed_successfully
+      kafka:
+        condition: service_started
     environment:
       PORT: "8083"
       DB_HOST: "team-db"
@@ -65,6 +67,7 @@ services:
       DB_PASS: "pass"
       DB_NAME: "teamsdb"
       AUTH_SERVICE_URL: "http://auth-service:8084"
+      KAFKA_BROKERS: "dev_kafka:9092"
     ports:
       - "8083:8083"
     networks: [app-net]
@@ -98,6 +101,8 @@ services:
       team-service: # Depends on team-service for API calls
         condition: service_started
       auth-service: # Depends on auth-service for user validation
+        condition: service_started
+      kafka: # Depends on Kafka for event publishing
         condition: service_started
       dbmate:
         condition: service_completed_successfully
@@ -188,6 +193,8 @@ services:
         condition: service_healthy
       auth-dbmate:
         condition: service_completed_successfully
+      kafka:
+        condition: service_started
     environment:
       PORT: "8084"
       DB_HOST: "auth-db"
@@ -236,6 +243,39 @@ services:
       AUTH_SERVICE_URL: "http://auth-service:8084"
     ports:
       - "8090:8080"
+    networks: [app-net]
+
+  # Realtime service (WebSocket)
+  realtime:
+    build:
+      context: ./realtime
+      dockerfile: ./dockerfile
+    container_name: realtime_service
+    depends_on:
+      kafka:
+        condition: service_started
+      auth-service:
+        condition: service_started
+    environment:
+      KAFKA_BROKERS: "dev_kafka:9092"
+      PORT: "8086"
+    ports:
+      - "8086:8086"
+    networks: [app-net]
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: nginx_gateway
+    depends_on:
+      - auth-service
+      - task-service
+      - team-service
+      - realtime
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
     networks: [app-net]
 
   # Mailpit - dev SMTP + web UI

@@ -170,6 +170,16 @@ func (h *TaskHandlers) CreateTaskInTeam(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, models.MapTask(*t))
+
+	// Emit task.created event (best-effort)
+	if h.producer != nil {
+		_ = h.producer.TaskCreated(context.Background(), t.ID, t.TeamID, creatorID, t.CreatorID, t.AssigneeID, map[string]any{
+			"title":       t.Title,
+			"description": t.Description,
+			"priority":    string(t.Priority),
+			"due":         t.Due.Format("2006-01-02"),
+		})
+	}
 }
 
 // ListTasksAcrossTeams returns tasks restricted to teams of the current user
@@ -404,6 +414,13 @@ func (h *TaskHandlers) DeleteTask(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+
+	// Emit task.deleted event (best-effort)
+	if h.producer != nil {
+		_ = h.producer.TaskDeleted(context.Background(), t.ID, t.TeamID, userID, t.CreatorID, t.AssigneeID, map[string]any{
+			"title": t.Title,
+		})
+	}
 }
 
 // SetAssignee sets or clears assignee

@@ -55,7 +55,7 @@ func (p *KafkaProducer) publish(ctx context.Context, topic string, evt TaskEvent
 	}
 	return p.writer.WriteMessages(ctx, kafka.Message{
 		Topic: topic,
-		Key:   []byte("task:" + itoa(evt.TaskID)),
+		Key:   []byte("task:" + itoa(evt.TeamID)),
 		Value: b,
 		Time:  time.Now(),
 	})
@@ -64,6 +64,32 @@ func (p *KafkaProducer) publish(ctx context.Context, topic string, evt TaskEvent
 func (p *KafkaProducer) TaskUpdated(ctx context.Context, taskID, teamID, actorID, creatorID int, assigneeID *int, payload interface{}) error {
 	return p.publish(ctx, "task.updated", TaskEvent{
 		EventType:  "task.updated",
+		TaskID:     taskID,
+		TeamID:     teamID,
+		ActorID:    actorID,
+		CreatorID:  creatorID,
+		AssigneeID: assigneeID,
+		Timestamp:  time.Now(),
+		Payload:    payload,
+	})
+}
+
+func (p *KafkaProducer) TaskCreated(ctx context.Context, taskID, teamID, actorID, creatorID int, assigneeID *int, payload interface{}) error {
+	return p.publish(ctx, "task.created", TaskEvent{
+		EventType:  "task.created",
+		TaskID:     taskID,
+		TeamID:     teamID,
+		ActorID:    actorID,
+		CreatorID:  creatorID,
+		AssigneeID: assigneeID,
+		Timestamp:  time.Now(),
+		Payload:    payload,
+	})
+}
+
+func (p *KafkaProducer) TaskDeleted(ctx context.Context, taskID, teamID, actorID, creatorID int, assigneeID *int, payload interface{}) error {
+	return p.publish(ctx, "task.deleted", TaskEvent{
+		EventType:  "task.deleted",
 		TaskID:     taskID,
 		TeamID:     teamID,
 		ActorID:    actorID,
