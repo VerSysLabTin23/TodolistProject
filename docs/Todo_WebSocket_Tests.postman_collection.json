@@ -1,0 +1,503 @@
+{
+  "info": {
+    "name": "Todo WebSocket Tests",
+    "description": "Complete test collection for Todo app with WebSocket real-time updates",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost",
+      "type": "string"
+    },
+    {
+      "key": "ws_url",
+      "value": "ws://localhost",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "team_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "task_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "🔐 Authentication",
+      "item": [
+        {
+          "name": "Register User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.user && response.user.id) {",
+                  "        pm.collectionVariables.set('user_id', response.user.id);",
+                  "        console.log('User ID saved:', response.user.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"testuser\",\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.access_token) {",
+                  "        pm.collectionVariables.set('access_token', response.access_token);",
+                  "        console.log('Access token saved');",
+                  "    }",
+                  "    if (response.user && response.user.id) {",
+                  "        pm.collectionVariables.set('user_id', response.user.id);",
+                  "        console.log('User ID saved:', response.user.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Validate Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/validate",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "validate"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👥 Teams",
+      "item": [
+        {
+          "name": "Create Team",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.id) {",
+                  "        pm.collectionVariables.set('team_id', response.id);",
+                  "        console.log('Team ID saved:', response.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"WebSocket Test Team\",\n  \"description\": \"Team for testing real-time WebSocket updates\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/teams/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "teams", ""]
+            }
+          }
+        },
+        {
+          "name": "Get Team",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/teams/{{team_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "teams", "{{team_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Team",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Team Name\",\n  \"description\": \"Updated description for WebSocket testing\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/teams/{{team_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "teams", "{{team_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Add Team Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 2,\n  \"role\": \"member\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/teams/{{team_id}}/members",
+              "host": ["{{base_url}}"],
+              "path": ["api", "teams", "{{team_id}}", "members"]
+            }
+          }
+        },
+        {
+          "name": "Get Team Members",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/teams/{{team_id}}/members",
+              "host": ["{{base_url}}"],
+              "path": ["api", "teams", "{{team_id}}", "members"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📝 Tasks",
+      "item": [
+        {
+          "name": "Create Task in Team",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.id) {",
+                  "        pm.collectionVariables.set('task_id', response.id);",
+                  "        console.log('Task ID saved:', response.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"WebSocket Test Task\",\n  \"description\": \"This task creation should trigger a WebSocket event\",\n  \"priority\": \"high\",\n  \"due\": \"2025-02-01\",\n  \"assigneeId\": {{user_id}}\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tasks/teams/{{team_id}}/tasks",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tasks", "teams", "{{team_id}}", "tasks"]
+            }
+          }
+        },
+        {
+          "name": "Get Task",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/tasks/{{task_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tasks", "{{task_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Task",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Task Title via WebSocket\",\n  \"description\": \"This update should trigger a task.updated WebSocket event\",\n  \"priority\": \"medium\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tasks/{{task_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tasks", "{{task_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Complete Task",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"completed\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tasks/{{task_id}}/complete",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tasks", "{{task_id}}", "complete"]
+            }
+          }
+        },
+        {
+          "name": "Uncomplete Task",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"completed\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tasks/{{task_id}}/complete",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tasks", "{{task_id}}", "complete"]
+            }
+          }
+        },
+        {
+          "name": "Update Task Assignee",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assigneeId\": {{user_id}}\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/tasks/{{task_id}}/assignee",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tasks", "{{task_id}}", "assignee"]
+            }
+          }
+        },
+        {
+          "name": "Delete Task",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/tasks/{{task_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tasks", "{{task_id}}"]
+            }
+          }
+        },
+        {
+          "name": "List Tasks in Team",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/tasks/teams/{{team_id}}/tasks",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tasks", "teams", "{{team_id}}", "tasks"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔄 WebSocket",
+      "item": [
+        {
+          "name": "Connect to WebSocket",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{ws_url}}/ws?userId={{user_id}}",
+              "host": ["{{ws_url}}"],
+              "path": ["ws"],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}"
+                }
+              ]
+            },
+            "description": "User-based WebSocket connection for real-time updates. Only requires userId - user will receive events from all teams they are a member of. Use this URL in Postman's WebSocket request feature."
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔍 System Health",
+      "item": [
+        {
+          "name": "Nginx Health Check",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Realtime Service Health",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "http://localhost:8086/ping",
+              "host": ["http"],
+              "port": "8086",
+              "path": ["ping"]
+            }
+          }
+        },
+        {
+          "name": "Auth Service Health",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "http://localhost:8084/healthz",
+              "host": ["http"],
+              "port": "8084",
+              "path": ["healthz"]
+            }
+          }
+        },
+        {
+          "name": "Task Service Health",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "http://localhost:8081/healthz",
+              "host": ["http"],
+              "port": "8081",
+              "path": ["healthz"]
+            }
+          }
+        },
+        {
+          "name": "Team Service Health",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "http://localhost:8083/healthz",
+              "host": ["http"],
+              "port": "8083",
+              "path": ["healthz"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

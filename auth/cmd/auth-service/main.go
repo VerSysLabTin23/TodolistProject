@@ -9,6 +9,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 
+	"github.com/VerSysLabTin23/TodolistProject/auth/internal/events"
 	"github.com/VerSysLabTin23/TodolistProject/auth/internal/handlers"
 	"github.com/VerSysLabTin23/TodolistProject/auth/internal/middleware"
 	"github.com/VerSysLabTin23/TodolistProject/auth/internal/repository"
@@ -33,7 +34,8 @@ func main() {
 
 	userRepo := repository.NewUserRepository(db)
 	authService := service.NewAuthService(userRepo)
-	h := handlers.NewAuthHandlers(authService, userRepo)
+	producer := events.NewKafkaProducer()
+	h := handlers.NewAuthHandlers(authService, userRepo, producer)
 	jwt := middleware.NewJWTMiddleware(authService)
 
 	r := gin.Default()
@@ -47,6 +49,9 @@ func main() {
 		role, _ := middleware.GetUserRoleFromContext(c)
 		c.JSON(200, gin.H{"valid": true, "user": gin.H{"id": userID, "username": username, "role": role}})
 	})
+
+	// Internal service endpoint for getting user info (no auth required for simplicity in dev)
+	r.GET("/internal/users/:id", h.GetUser)
 
 	auth := r.Group("/auth")
 	{
