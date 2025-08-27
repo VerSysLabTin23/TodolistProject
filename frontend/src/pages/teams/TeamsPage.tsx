@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { listUserTeams, type Team } from "../../api/team";
+import CreateTeamButton from "../../components/CreateTeamButton.tsx";
 
 function useCurrentUserId(): number | null {
     return useMemo(() => {
@@ -38,6 +39,10 @@ export default function TeamsPage() {
     return (
         <section style={{ maxWidth: 900, margin: "0 auto" }}>
             <h1 style={{ marginBottom: 12 }}>My Teams</h1>
+            <CreateTeamButton
+                small
+                onCreated={(team) => setTeams((prev) => [team, ...prev])}
+            />
             {teams.length === 0 ? (
                 <div style={{ color: "#6b7280" }}>
                     You are not a member of any team yet.

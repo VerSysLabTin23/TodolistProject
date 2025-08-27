@@ -35,3 +35,7 @@ export async function getTeamById(teamId: number): Promise<Team> {
     const { data } = await httpTeam.get<Team>(`/teams/${teamId}`);
     return data;
 }
+export async function createTeam(body: { name: string; description?: string }): Promise<Team> {
+    const { data } = await httpTeam.post<Team>("/teams", body); // POST /teams
+    return data;
+}

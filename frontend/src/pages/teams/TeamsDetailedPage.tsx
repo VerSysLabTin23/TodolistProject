@@ -8,6 +8,7 @@ import {
     deleteTask,
     type Task,
 } from "../../api/task";
+import CreateTeamButton from "../../components/CreateTeamButton.tsx";
 
 type NewTaskForm = {
     title: string;
@@ -103,6 +104,7 @@ export default function TeamDetailsPage() {
             <h1 style={{ marginBottom: 12 }}>
                 Team: {teamName || `#${teamId}`}
             </h1>
+            <CreateTeamButton small />
 
             {/* Create Task */}
             <form onSubmit={onCreate}

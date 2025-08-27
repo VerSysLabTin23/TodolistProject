@@ -34,7 +34,6 @@ export default function RegisterForm() {
 
     return (
         <form onSubmit={handleSubmit}>
-            <h2>Register</h2>
             <input name="username" placeholder="Username" value={form.username} onChange={handleChange} />
             <input name="email" placeholder="Email" value={form.email} onChange={handleChange} />
             <input type="password" name="password" placeholder="Password" value={form.password} onChange={handleChange} />
