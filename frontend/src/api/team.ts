@@ -31,3 +31,7 @@ export async function listUserTeams(userId: number): Promise<Team[]> {
     const { data } = await httpTeam.get<Team[]>(`/users/${userId}/teams`);
     return data;
 }
+export async function getTeamById(teamId: number): Promise<Team> {
+    const { data } = await httpTeam.get<Team>(`/teams/${teamId}`);
+    return data;
+}
