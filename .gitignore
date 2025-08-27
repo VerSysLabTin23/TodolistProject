@@ -27,18 +27,25 @@ vendor/
 go.work
 
 # Binary files (Go build outputs)
-auth-service
-team-service
-task-service
-api-gateway
-notification-service
-realtime-service
-**/auth-service
-**/team-service
-**/task-service
-**/api-gateway
-**/notification-service
-**/realtime-service
+# auth-service
+# team-service
+# task-service
+# api-gateway
+# notification-service
+# realtime-service
+# **/auth-service
+# **/team-service
+# **/task-service
+# **/api-gateway
+# **/notification-service
+# **/realtime-service
+
+# Ignore built service binaries (files), not cmd folders
+/auth/auth-service
+/team/team-service
+/task/task-service
+/notification/notification-service
+/realtime/realtime-service
 
 # Docker
 .dockerignore

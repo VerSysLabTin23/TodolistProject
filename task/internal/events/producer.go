@@ -55,7 +55,7 @@ func (p *KafkaProducer) publish(ctx context.Context, topic string, evt TaskEvent
 	}
 	return p.writer.WriteMessages(ctx, kafka.Message{
 		Topic: topic,
-		Key:   []byte("task:" + itoa(evt.TeamID)),
+		Key:   []byte("team:" + itoa(evt.TeamID)),
 		Value: b,
 		Time:  time.Now(),
 	})
