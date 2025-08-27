@@ -305,6 +305,7 @@ services:
       - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@dev_kafka:9093
       - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://dev_kafka:9092
       - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_CFG_NUM_PARTITIONS=3 
       - KAFKA_KRAFT_CLUSTER_ID=q1w2e3r4t5y6u7i8o9p0zxcvbnmasdf # dev-only
     ports:
       - "9092:9092"

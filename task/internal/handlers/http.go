@@ -361,7 +361,14 @@ func (h *TaskHandlers) UpdateTask(c *gin.Context) {
 
 	// Emit task.updated event (best-effort)
 	if h.producer != nil {
-		_ = h.producer.TaskUpdated(context.Background(), t.ID, t.TeamID, userID, t.CreatorID, t.AssigneeID, map[string]any{"title": t.Title, "completed": t.Completed})
+		_ = h.producer.TaskUpdated(context.Background(), t.ID, t.TeamID, userID, t.CreatorID, t.AssigneeID, map[string]any{
+			"title":       t.Title,
+			"completed":   t.Completed,
+			"priority":    string(t.Priority),
+			"description": t.Description,
+			"due":         t.Due,
+			"assigneeId":  t.AssigneeID,
+		})
 	}
 }
 

@@ -28,7 +28,7 @@ func NewAuthService(repo repository.UserRepository) *AuthService {
 	if jwtSecret == "" {
 		jwtSecret = "your-secret-key-change-in-production"
 	}
-	accessTTL := 15 * time.Minute
+	accessTTL := 15 * time.Hour
 	refreshTTL := 7 * 24 * time.Hour
 	if s := os.Getenv("JWT_ACCESS_TTL"); s != "" {
 		if ttl, err := time.ParseDuration(s); err == nil {
