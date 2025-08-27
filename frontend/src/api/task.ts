@@ -48,3 +48,7 @@ export async function setCompleted(id: number, completed: boolean): Promise<Task
     const { data } = await httpTask.post<Task>(`/tasks/${id}/complete`, { completed });
     return data;
 }
+export async function getTask(id: number): Promise<Task> {
+    const { data } = await httpTask.get<Task>(`/tasks/${id}`);
+    return data;
+}
