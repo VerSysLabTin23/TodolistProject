@@ -1,5 +1,12 @@
-// Types for the realtime task events coming from the server
-export type TaskEventType = "task.created" | "task.updated" | "task.deleted" | "task.completed";
+// import { useEffect, useRef, useState } from "react";
+
+import {useState} from "react";
+
+export type TaskEventType =
+    | "task.created"
+    | "task.updated"
+    | "task.deleted"
+    | "task.completed";
 
 export interface TaskEvent {
     eventType: TaskEventType;
@@ -9,71 +16,69 @@ export interface TaskEvent {
     creatorId: number;
     assigneeId?: number | null;
     timestamp: string;
-    // Avoid `any`: generic JSON payload with unknown fields
     payload?: Record<string, unknown>;
 }
 
+type Status = "connecting" | "connected" | "closed" | "error";
+
 export interface Options {
     onEvent?: (e: TaskEvent) => void;
-    onStatus?: (s: "connecting" | "connected" | "closed" | "error") => void;
-    // allow overrides for testing
-    token?: string | null;
-    baseUrl?: string;
+    onStatus?: (s: Status) => void;
+    baseUrl?: string;       // default /ws
+    userId?: number | null; // default from localStorage.currentUser.id
+    token?: string | null;  // optional fallback
 }
 
-/**
- * Opens a single WebSocket connection and notifies via callbacks.
- * Authentication token is passed as a query parameter by default.
- * If your backend expects a different auth method, adjust here.
- */
+function readUserId(): number | null {
+    try {
+        const raw = localStorage.getItem("currentUser");
+        if (!raw) return null;
+        const obj = JSON.parse(raw);
+        return typeof obj?.id === "number" ? obj.id : null;
+    } catch {
+        return null;
+    }
+}
+
 export function connectTaskWS(opts: Options = {}) {
-    const token = opts.token ?? localStorage.getItem("accessToken");
-    const base =
-        opts.baseUrl ??
-        ((import.meta.env.VITE_WS_URL as string | undefined) ?? "/ws"); // typed, no `any`
+    const base = opts.baseUrl ?? (import.meta.env.VITE_WS_URL ?? "/ws");
+    const uid = opts.userId ?? readUserId();
+    const token = opts.token ?? localStorage.getItem("accessToken") ?? "";
 
-    // Common patterns: ?token=... OR Sec-WebSocket-Protocol.
-    // Using query param here (matches earlier backend note).
-    const url = `${base}?token=${encodeURIComponent(token ?? "")}`;
+    // Prefer userId, fallback to token if needed by backend
+    const qs =
+        uid != null
+            ? `userId=${encodeURIComponent(String(uid))}`
+            : `token=${encodeURIComponent(token)}`;
 
-    const ws: WebSocket = new WebSocket(url); // prefer const (never reassigned)
+    const url = `${base}?${qs}`;
+
+    const ws = new WebSocket(url);
     opts.onStatus?.("connecting");
 
-    ws.onopen = () => {
-        opts.onStatus?.("connected");
-    };
-
-    // MessageEvent<string>: server sends JSON text
+    ws.onopen = () => opts.onStatus?.("connected");
     ws.onmessage = (msg: MessageEvent<string>) => {
         try {
-            const parsed: unknown = JSON.parse(msg.data);
-
-            // minimal shape check before casting
+            const parsed = JSON.parse(msg.data);
             if (parsed && typeof parsed === "object" && "eventType" in parsed) {
                 opts.onEvent?.(parsed as TaskEvent);
             }
         } catch {
-            // not empty: surface a soft error signal (and keep the connection)
             opts.onStatus?.("error");
-            // optional: console.debug("WS parse error", err);
         }
     };
-
-    ws.onclose = () => {
-        opts.onStatus?.("closed");
-    };
-
-    ws.onerror = () => {
-        opts.onStatus?.("error");
-    };
+    ws.onclose  = () => opts.onStatus?.("closed");
+    ws.onerror  = () => opts.onStatus?.("error");
 
     return {
-        close(): void {
-            try {
-                ws.close();
-            } catch {
-                /* intentionally ignore close errors to keep teardown clean */
-            }
+        close() {
+            try { ws.close(); } catch { /* ignore */ }
         },
     };
+}
+
+/** Small React hook to show status in the UI if you want */
+export function useWsStatus() {
+    const [status, setStatus] = useState<Status>("closed");
+    return { status, setStatus } as const;
 }

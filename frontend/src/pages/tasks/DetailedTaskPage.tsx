@@ -13,6 +13,7 @@ export default function TaskDetailsPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [err, setErr] = useState<string | null>(null);
+    // const { status: wsStatus, setStatus: setWsStatus } = useWsStatus();
 
     useEffect(() => {
         let canceled = false;
@@ -20,7 +21,7 @@ export default function TaskDetailsPage() {
             try {
                 const t = await getTask(taskId);
                 if (!canceled) setTask(t);
-            } catch (e) {
+            } catch {
                 if (!canceled) setErr("Failed to load task");
             } finally {
                 if (!canceled) setLoading(false);
@@ -35,13 +36,15 @@ export default function TaskDetailsPage() {
         return () => { canceled = true; };
     }, [taskId]);
 
+
+
     async function save(changes: Partial<Task>) {
         if (!task) return;
         setSaving(true);
         try {
             const updated = await updateTask(task.id, changes);
             setTask(updated);
-        } catch (e) {
+        } catch {
             alert("Save failed");
         } finally {
             setSaving(false);

@@ -8,13 +8,14 @@ import {
     deleteTask,
     type Task,
 } from "../../api/task";
-import CreateTeamButton from "../../components/CreateTeamButton.tsx";
+import CreateTeamButton from "../../components/CreateTeamButton";
+import { connectTaskWS, type TaskEvent } from "../../realtime/ws";
 
 type NewTaskForm = {
     title: string;
     description?: string;
     priority: "low" | "medium" | "high";
-    due: string;                 // ISO date (yyyy-mm-dd)
+    due: string;              // yyyy-mm-dd
     assigneeId?: number;
 };
 
@@ -26,6 +27,9 @@ export default function TeamDetailsPage() {
     const [tasks, setTasks] = useState<Task[]>([]);
     const [loading, setLoading] = useState(true);
     const [creating, setCreating] = useState(false);
+    const [wsStatus, setWsStatus] =
+        useState<"connecting" | "connected" | "closed" | "error">("closed");
+
     const [form, setForm] = useState<NewTaskForm>({
         title: "",
         description: "",
@@ -34,6 +38,7 @@ export default function TeamDetailsPage() {
         assigneeId: undefined,
     });
 
+    // Initial load: team info + tasks for this team
     useEffect(() => {
         let cancel = false;
         async function load() {
@@ -49,8 +54,58 @@ export default function TeamDetailsPage() {
                 if (!cancel) setLoading(false);
             }
         }
-        if (Number.isFinite(teamId)) load(); else setLoading(false);
+        if (Number.isFinite(teamId)) load();
+        else setLoading(false);
+
         return () => { cancel = true; };
+    }, [teamId]);
+
+    // Realtime: subscribe to task events
+    useEffect(() => {
+        if (!Number.isFinite(teamId)) return;
+
+        const sub = connectTaskWS({
+            onStatus: setWsStatus,
+            onEvent: (evt: TaskEvent) => {
+                if (evt.teamId !== teamId) return;
+
+                setTasks((prev) => {
+                    switch (evt.eventType) {
+                        case "task.created":
+                            return [
+                                {
+                                    id: evt.taskId,
+                                    teamId: evt.teamId,
+                                    title: String(evt.payload?.title ?? "New task"),
+                                    description:
+                                        (evt.payload?.description as string | undefined) ?? undefined,
+                                    priority: evt.payload?.priority as Task["priority"],
+                                    due: evt.payload?.due as string | undefined,
+                                    assigneeId:
+                                        (evt.payload?.assigneeId as number | undefined) ??
+                                        (evt.assigneeId ?? undefined),
+                                    completed: Boolean(evt.payload?.completed ?? false),
+                                },
+                                ...prev,
+                            ];
+
+                        case "task.updated":
+                        case "task.completed":
+                            return prev.map((t) =>
+                                t.id === evt.taskId ? { ...t, ...(evt.payload as object) } : t
+                            );
+
+                        case "task.deleted":
+                            return prev.filter((t) => t.id !== evt.taskId);
+
+                        default:
+                            return prev;
+                    }
+                });
+            },
+        });
+
+        return () => sub.close();
     }, [teamId]);
 
     async function onCreate(e: React.FormEvent) {
@@ -69,7 +124,6 @@ export default function TeamDetailsPage() {
                 assigneeId: form.assigneeId,
             });
             setTasks((prev) => [created, ...prev]);
-            // reset minimal fields
             setForm((f) => ({ ...f, title: "", description: "" }));
         } catch {
             alert("Failed to create task.");
@@ -102,23 +156,26 @@ export default function TeamDetailsPage() {
     return (
         <section style={{ maxWidth: 1000, margin: "0 auto" }}>
             <h1 style={{ marginBottom: 12 }}>
-                Team: {teamName || `#${teamId}`}
+                Team: {teamName || `#${teamId}`}{" "}
+                <span style={{ fontSize: 12, color: "#6b7280" }}>({wsStatus})</span>
             </h1>
             <CreateTeamButton small />
 
             {/* Create Task */}
-            <form onSubmit={onCreate}
-                  style={{
-                      display: "grid",
-                      gridTemplateColumns: "2fr 3fr 1fr 1fr 1fr auto",
-                      gap: 8,
-                      alignItems: "end",
-                      border: "1px solid #e5e7eb",
-                      borderRadius: 8,
-                      padding: 12,
-                      marginBottom: 16,
-                      background: "#fff",
-                  }}>
+            <form
+                onSubmit={onCreate}
+                style={{
+                    display: "grid",
+                    gridTemplateColumns: "2fr 3fr 1fr 1fr 1fr auto",
+                    gap: 8,
+                    alignItems: "end",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 8,
+                    padding: 12,
+                    marginBottom: 16,
+                    background: "#fff",
+                }}
+            >
                 <label style={{ display: "grid", gap: 4 }}>
                     <span style={{ fontSize: 12, color: "#6b7280" }}>Title*</span>
                     <input
@@ -142,7 +199,12 @@ export default function TeamDetailsPage() {
                     <span style={{ fontSize: 12, color: "#6b7280" }}>Priority</span>
                     <select
                         value={form.priority}
-                        onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as NewTaskForm["priority"] }))}
+                        onChange={(e) =>
+                            setForm((f) => ({
+                                ...f,
+                                priority: e.target.value as NewTaskForm["priority"],
+                            }))
+                        }
                     >
                         <option value="low">low</option>
                         <option value="medium">medium</option>
@@ -167,7 +229,8 @@ export default function TeamDetailsPage() {
                         onChange={(e) =>
                             setForm((f) => ({
                                 ...f,
-                                assigneeId: e.target.value === "" ? undefined : Number(e.target.value),
+                                assigneeId:
+                                    e.target.value === "" ? undefined : Number(e.target.value),
                             }))
                         }
                         placeholder="optional"
@@ -185,7 +248,8 @@ export default function TeamDetailsPage() {
             ) : (
                 <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
                     {tasks.map((t) => (
-                        <li key={t.id}
+                        <li
+                            key={t.id}
                             style={{
                                 padding: "10px 12px",
                                 border: "1px solid #e5e7eb",
@@ -195,16 +259,20 @@ export default function TeamDetailsPage() {
                                 display: "flex",
                                 alignItems: "center",
                                 gap: 12,
-                            }}>
+                            }}
+                        >
                             <div style={{ flex: 1 }}>
                                 <div>
                                     <strong>{t.title}</strong>{" "}
                                     <span style={{ fontSize: 12, color: "#6b7280" }}>
-                    {t.priority ? `[${t.priority}]` : ""} {t.due ? `• due ${t.due}` : ""}
+                    {t.priority ? `[${t.priority}]` : ""}{" "}
+                                        {t.due ? `• due ${t.due}` : ""}
                   </span>
                                 </div>
                                 {t.description ? (
-                                    <div style={{ fontSize: 12, color: "#6b7280" }}>{t.description}</div>
+                                    <div style={{ fontSize: 12, color: "#6b7280" }}>
+                                        {t.description}
+                                    </div>
                                 ) : null}
                             </div>
 
