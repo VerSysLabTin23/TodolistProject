@@ -8,9 +8,11 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import WelcomePage from "./pages/WelcomePage";
 import TasksPage from "./pages/tasks/TasksPage";
-import DetailedTaskPage from "./pages/tasks/DetailedTaskPage";
 import TeamsPage from "./pages/teams/TeamsPage";
 import TeamsDetailedPage from "./pages/teams/TeamsDetailedPage";
+import NotFoundPage from "./pages/NotFound.tsx";
+import HistoryPage from "./pages/HistoryPage.tsx";
+import TaskDetailsPage from "./pages/tasks/DetailedTaskPage";
 
 export default function App() {
     return (
@@ -26,10 +28,12 @@ export default function App() {
                 <Route element={<AppLayout />}>
                     <Route element={<RequireAuth />}>
                         <Route path="/welcome" element={<WelcomePage />} />
-                        <Route path="/tasks" element={<TasksPage />} />
-                        <Route path="/tasks/:id" element={<DetailedTaskPage />} />
                         <Route path="/teams" element={<TeamsPage />} />
                         <Route path="/teams/:id" element={<TeamsDetailedPage />} />
+                        <Route path="/tasks" element={<TasksPage />} />
+                        <Route path="/tasks/:id" element={<TaskDetailsPage />} />
+                        <Route path="/history" element={<HistoryPage />} />
+                        <Route path="*" element={<NotFoundPage />} />
                     </Route>
                 </Route>
             </Routes>

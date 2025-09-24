@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getTeamById } from "../../api/team";
+import { getTeamById, listTeamMembers, type TeamMember } from "../../api/team";
 import {
     listTasksForTeam,
     createTaskInTeam,
@@ -9,13 +9,14 @@ import {
     type Task,
 } from "../../api/task";
 import CreateTeamButton from "../../components/CreateTeamButton";
-import { connectTaskWS, type TaskEvent } from "../../realtime/ws";
+import { type TaskEvent } from "../../realtime/ws";
+import {useRealtime} from "../../realtime/useRealtime.ts";
 
 type NewTaskForm = {
     title: string;
     description?: string;
     priority: "low" | "medium" | "high";
-    due: string;              // yyyy-mm-dd
+    due: string;
     assigneeId?: number;
 };
 
@@ -23,7 +24,8 @@ export default function TeamDetailsPage() {
     const { id } = useParams<{ id: string }>();
     const teamId = Number(id);
 
-    const [teamName, setTeamName] = useState<string>("");
+    const [teamName, setTeamName] = useState("");
+    const [members, setMembers] = useState<TeamMember[]>([]);
     const [tasks, setTasks] = useState<Task[]>([]);
     const [loading, setLoading] = useState(true);
     const [creating, setCreating] = useState(false);
@@ -38,75 +40,65 @@ export default function TeamDetailsPage() {
         assigneeId: undefined,
     });
 
-    // Initial load: team info + tasks for this team
+    // map for quick name lookup
+    const memberNameById = useMemo(() => {
+        const m = new Map<number, string>();
+        members.forEach((u) => m.set(u.id, u.username));
+        return m;
+    }, [members]);
+
+    // Initial load (team, tasks, members)
     useEffect(() => {
         let cancel = false;
         async function load() {
             try {
-                const [team, ts] = await Promise.all([
+                const [team, ts, ms] = await Promise.all([
                     getTeamById(teamId),
                     listTasksForTeam(teamId),
+                    listTeamMembers(teamId),
                 ]);
                 if (cancel) return;
                 setTeamName(team.name);
                 setTasks(ts);
+                setMembers(ms);
             } finally {
                 if (!cancel) setLoading(false);
             }
         }
         if (Number.isFinite(teamId)) load();
         else setLoading(false);
-
-        return () => { cancel = true; };
+        return () => {
+            cancel = true;
+        };
     }, [teamId]);
 
-    // Realtime: subscribe to task events
-    useEffect(() => {
-        if (!Number.isFinite(teamId)) return;
-
-        const sub = connectTaskWS({
-            onStatus: setWsStatus,
-            onEvent: (evt: TaskEvent) => {
-                if (evt.teamId !== teamId) return;
-
-                setTasks((prev) => {
-                    switch (evt.eventType) {
-                        case "task.created":
-                            return [
-                                {
-                                    id: evt.taskId,
-                                    teamId: evt.teamId,
-                                    title: String(evt.payload?.title ?? "New task"),
-                                    description:
-                                        (evt.payload?.description as string | undefined) ?? undefined,
-                                    priority: evt.payload?.priority as Task["priority"],
-                                    due: evt.payload?.due as string | undefined,
-                                    assigneeId:
-                                        (evt.payload?.assigneeId as number | undefined) ??
-                                        (evt.assigneeId ?? undefined),
-                                    completed: Boolean(evt.payload?.completed ?? false),
-                                },
-                                ...prev,
-                            ];
-
-                        case "task.updated":
-                        case "task.completed":
-                            return prev.map((t) =>
-                                t.id === evt.taskId ? { ...t, ...(evt.payload as object) } : t
-                            );
-
-                        case "task.deleted":
-                            return prev.filter((t) => t.id !== evt.taskId);
-
-                        default:
-                            return prev;
-                    }
-                });
-            },
+    useRealtime((evt: TaskEvent) => {
+        if (evt.teamId !== teamId) return;
+        setTasks(prev => {
+            switch (evt.eventType) {
+                case "task.created":
+                    return [{
+                        id: evt.taskId,
+                        teamId: evt.teamId,
+                        title: String(evt.payload?.title ?? "New task"),
+                        description: (evt.payload?.description as string | undefined) ?? undefined,
+                        priority: evt.payload?.priority as Task["priority"],
+                        due: evt.payload?.due as string | undefined,
+                        assigneeId:
+                            (evt.payload?.assigneeId as number | undefined) ??
+                            (evt.assigneeId ?? undefined),
+                        completed: Boolean(evt.payload?.completed ?? false),
+                    }, ...prev];
+                case "task.updated":
+                case "task.completed":
+                    return prev.map(t => t.id === evt.taskId ? { ...t, ...(evt.payload as object) } : t);
+                case "task.deleted":
+                    return prev.filter(t => t.id !== evt.taskId);
+                default:
+                    return prev;
+            }
         });
-
-        return () => sub.close();
-    }, [teamId]);
+    }, { onStatus: setWsStatus });
 
     async function onCreate(e: React.FormEvent) {
         e.preventDefault();
@@ -159,9 +151,10 @@ export default function TeamDetailsPage() {
                 Team: {teamName || `#${teamId}`}{" "}
                 <span style={{ fontSize: 12, color: "#6b7280" }}>({wsStatus})</span>
             </h1>
+
             <CreateTeamButton small />
 
-            {/* Create Task */}
+            {/* Create task */}
             <form
                 onSubmit={onCreate}
                 style={{
@@ -200,10 +193,7 @@ export default function TeamDetailsPage() {
                     <select
                         value={form.priority}
                         onChange={(e) =>
-                            setForm((f) => ({
-                                ...f,
-                                priority: e.target.value as NewTaskForm["priority"],
-                            }))
+                            setForm((f) => ({ ...f, priority: e.target.value as NewTaskForm["priority"] }))
                         }
                     >
                         <option value="low">low</option>
@@ -221,20 +211,25 @@ export default function TeamDetailsPage() {
                     />
                 </label>
 
+                {/* Assignee: dropdown of team members */}
                 <label style={{ display: "grid", gap: 4 }}>
-                    <span style={{ fontSize: 12, color: "#6b7280" }}>Assignee (userId)</span>
-                    <input
-                        type="number"
+                    <span style={{ fontSize: 12, color: "#6b7280" }}>Assignee</span>
+                    <select
                         value={form.assigneeId ?? ""}
                         onChange={(e) =>
                             setForm((f) => ({
                                 ...f,
-                                assigneeId:
-                                    e.target.value === "" ? undefined : Number(e.target.value),
+                                assigneeId: e.target.value === "" ? undefined : Number(e.target.value),
                             }))
                         }
-                        placeholder="optional"
-                    />
+                    >
+                        <option value="">Unassigned</option>
+                        {members.map((m) => (
+                            <option key={m.id} value={m.id}>
+                                {m.username} ({m.role})
+                            </option>
+                        ))}
+                    </select>
                 </label>
 
                 <button type="submit" disabled={creating} style={{ height: 36 }}>
@@ -242,7 +237,7 @@ export default function TeamDetailsPage() {
                 </button>
             </form>
 
-            {/* Tasks in this team */}
+            {/* Tasks list */}
             {tasks.length === 0 ? (
                 <div style={{ color: "#6b7280" }}>No tasks in this team yet.</div>
             ) : (
@@ -266,13 +261,12 @@ export default function TeamDetailsPage() {
                                     <strong>{t.title}</strong>{" "}
                                     <span style={{ fontSize: 12, color: "#6b7280" }}>
                     {t.priority ? `[${t.priority}]` : ""}{" "}
-                                        {t.due ? `• due ${t.due}` : ""}
+                                        {t.due ? `• due ${t.due}` : ""}{" "}
+                                        {t.assigneeId ? `• @${memberNameById.get(t.assigneeId)}` : ""}
                   </span>
                                 </div>
                                 {t.description ? (
-                                    <div style={{ fontSize: 12, color: "#6b7280" }}>
-                                        {t.description}
-                                    </div>
+                                    <div style={{ fontSize: 12, color: "#6b7280" }}>{t.description}</div>
                                 ) : null}
                             </div>
 

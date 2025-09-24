@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { listMyTasks, type Task } from "../../api/task";
 import { listUserTeams, type Team } from "../../api/team";
+import { useRealtime } from "../../realtime/useRealtime";
 
 function useCurrentUserId(): number | null {
     return useMemo(() => {
@@ -18,29 +19,45 @@ function useCurrentUserId(): number | null {
 
 export default function TasksPage() {
     const userId = useCurrentUserId();
+
     const [tasks, setTasks] = useState<Task[]>([]);
     const [teams, setTeams] = useState<Team[]>([]);
     const [loading, setLoading] = useState(true);
     const [q, setQ] = useState("");
 
+    // canonical reload used on mount and on each ws event
+    const reload = useCallback(async () => {
+        if (!userId) return;
+        const [all, myTeams] = await Promise.all([
+            listMyTasks(),
+            listUserTeams(userId),
+        ]);
+        setTasks(all);
+        setTeams(myTeams);
+    }, [userId]);
+
+    // initial load
     useEffect(() => {
         let canceled = false;
-        async function load() {
-            if (!userId) { setLoading(false); return; }
+        (async () => {
+            setLoading(true);
             try {
-                const [all, myTeams] = await Promise.all([listMyTasks(), listUserTeams(userId)]);
-                if (canceled) return;
-                setTasks(all);
-                setTeams(myTeams);
+                await reload();
             } finally {
                 if (!canceled) setLoading(false);
             }
-        }
-        load();
-        return () => { canceled = true; };
-    }, [userId]);
+        })();
+        return () => {
+            canceled = true;
+        };
+    }, [reload]);
 
-    const byTeamName = useMemo(() => {
+    // realtime: refresh list whenever a task.* event arrives
+    useRealtime(() => {
+        void reload();
+    });
+
+    const teamNameById = useMemo(() => {
         const map = new Map<number, string>();
         for (const t of teams) map.set(t.id, t.name);
         return map;
@@ -49,13 +66,14 @@ export default function TasksPage() {
     const filtered = useMemo(() => {
         const term = q.trim().toLowerCase();
         if (!term) return tasks;
-        return tasks.filter(t =>
+        return tasks.filter((t) =>
             t.title.toLowerCase().includes(term) ||
             (t.description ?? "").toLowerCase().includes(term)
         );
     }, [tasks, q]);
 
-    if (loading) return <div>Loading…</div>;
+    if (!userId) return <div style={{ maxWidth: 900, margin: "0 auto" }}>Please log in.</div>;
+    if (loading) return <div style={{ maxWidth: 900, margin: "0 auto" }}>Loading…</div>;
 
     return (
         <section style={{ maxWidth: 900, margin: "0 auto" }}>
@@ -68,7 +86,9 @@ export default function TasksPage() {
                     onChange={(e) => setQ(e.target.value)}
                     style={{ flex: 1, padding: 8 }}
                 />
-                <Link to="/teams" style={{ alignSelf: "center" }}>Create task (go to team)</Link>
+                <Link to="/teams" style={{ alignSelf: "center" }}>
+                    Create task (go to team)
+                </Link>
             </div>
 
             {filtered.length === 0 ? (
@@ -95,7 +115,7 @@ export default function TasksPage() {
                 {t.priority ? `[${t.priority}]` : ""} {t.due ? `due ${t.due}` : ""}
               </span>
                             <div style={{ fontSize: 12, color: "#6b7280" }}>
-                                Team: {byTeamName.get(t.teamId) ?? `#${t.teamId}`}
+                                Team: {teamNameById.get(t.teamId) ?? `#${t.teamId}`}
                             </div>
                         </li>
                     ))}

@@ -293,6 +293,8 @@ services:
       - task-service
       - team-service
       - realtime
+    ports:
+      - "5173:80"
     networks: [app-net]
 
   # Mailpit - dev SMTP + web UI

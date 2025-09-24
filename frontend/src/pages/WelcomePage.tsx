@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { listUserTeams, type Team } from "../api/team";
 import { listMyTasks, type Task } from "../api/task";
-import { connectTaskWS, type TaskEvent } from "../realtime/ws";
+import { type TaskEvent } from "../realtime/ws";
+import {useRealtime} from "../realtime/useRealtime.ts";
 
 function useCurrentUserId(): number | null {
     return useMemo(() => {
@@ -58,44 +59,31 @@ export default function WelcomePage() {
         };
     }, [userId]);
 
-    // B) subscribe to realtime task events
-    useEffect(() => {
-        if (!userId) return;
-        const sub = connectTaskWS({
-            onStatus: setWsStatus,
-            onEvent: (evt: TaskEvent) => {
-                setTasks((prev) => {
-                    switch (evt.eventType) {
-                        case "task.deleted":
-                            return prev.filter((t) => t.id !== evt.taskId);
-                        case "task.created":
-                            return [
-                                {
-                                    id: evt.taskId,
-                                    teamId: evt.teamId,
-                                    title: String(evt.payload?.title ?? "New task"),
-                                    priority: evt.payload?.priority as Task["priority"],
-                                    due: evt.payload?.due as string | undefined,
-                                    assigneeId:
-                                        (evt.payload?.assigneeId as number | undefined) ??
-                                        (evt.assigneeId ?? undefined),
-                                    completed: false,
-                                },
-                                ...prev,
-                            ];
-                        case "task.updated":
-                        case "task.completed":
-                            return prev.map((t) =>
-                                t.id === evt.taskId ? { ...t, ...(evt.payload as object) } : t
-                            );
-                        default:
-                            return prev;
-                    }
-                });
-            },
+    useRealtime((evt: TaskEvent) => {
+        setTasks(prev => {
+            switch (evt.eventType) {
+                case "task.deleted":
+                    return prev.filter(t => t.id !== evt.taskId);
+                case "task.created":
+                    return [{
+                        id: evt.taskId,
+                        teamId: evt.teamId,
+                        title: String(evt.payload?.title ?? "New task"),
+                        priority: evt.payload?.priority as Task["priority"],
+                        due: evt.payload?.due as string | undefined,
+                        assigneeId:
+                            (evt.payload?.assigneeId as number | undefined) ??
+                            (evt.assigneeId ?? undefined),
+                        completed: Boolean(evt.payload?.completed ?? false),
+                    }, ...prev];
+                case "task.updated":
+                case "task.completed":
+                    return prev.map(t => t.id === evt.taskId ? { ...t, ...(evt.payload as object) } : t);
+                default:
+                    return prev;
+            }
         });
-        return () => sub.close();
-    }, [userId]);
+    }, { onStatus: setWsStatus });
 
     if (loading) return <div>Loading…</div>;
     if (error) return <div style={{ color: "crimson" }}>{error}</div>;

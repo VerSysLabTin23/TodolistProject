@@ -3,6 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
     getTask, updateTask, deleteTask, setAssignee, setCompleted, type Task,
 } from "../../api/task";
+import { useRealtime } from "../../realtime/useRealtime.ts";
+import type { TaskEvent } from "../../realtime/ws";
 
 export default function TaskDetailsPage() {
     const { id } = useParams<{ id: string }>();
@@ -36,7 +38,11 @@ export default function TaskDetailsPage() {
         return () => { canceled = true; };
     }, [taskId]);
 
-
+    useRealtime((evt: TaskEvent) => {
+        if (!Number.isFinite(taskId)) return;
+        if (evt.taskId !== taskId) return;
+        setTask(prev => (prev ? { ...prev, ...(evt.payload as Partial<Task>) } : prev));
+    });
 
     async function save(changes: Partial<Task>) {
         if (!task) return;

@@ -14,6 +14,12 @@ httpTeam.interceptors.request.use((config) => {
     return config;
 });
 
+export type TeamMember = {
+    id: number;
+    username: string;
+    role: "owner" | "admin" | "member";
+};
+
 export interface Team {
     id: number;
     name: string;
@@ -35,7 +41,11 @@ export async function getTeamById(teamId: number): Promise<Team> {
     const { data } = await httpTeam.get<Team>(`/teams/${teamId}`);
     return data;
 }
-export async function createTeam(body: { name: string; description?: string }): Promise<Team> {
-    const { data } = await httpTeam.post<Team>("/teams", body); // POST /teams
+export async function createTeam(body: { name: string; description?: string }) {
+    const { data } = await httpTeam.post<Team>("/teams", body);
+    return data;
+}
+export async function listTeamMembers(teamId: number): Promise<TeamMember[]> {
+    const { data } = await httpTeam.get<TeamMember[]>(`/teams/${teamId}/members`);
     return data;
 }

@@ -1,4 +1,4 @@
-import {Link, useLocation, useNavigate} from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { isAuthenticated, currentUser, logout } from "../auth/session";
 import CreateTeamButton from "./CreateTeamButton";
 
@@ -11,19 +11,44 @@ export default function Navbar() {
 
     function handleLogout() {
         logout();
-        // prevent “Back” returning to protected pages
-        navigate("/", { replace: true });
+        navigate("/", { replace: true }); // prevent back nav into protected pages
     }
 
+    const linkBase: React.CSSProperties = {
+        textDecoration: "none",
+        padding: "6px 10px",
+        borderRadius: 6,
+        fontSize: 14,
+    };
+    const linkStyle = ({ isActive }: { isActive: boolean }): React.CSSProperties => ({
+        ...linkBase,
+        color: isActive ? "#111827" : "#374151",
+        background: isActive ? "#e5e7eb" : "transparent",
+    });
+
     return (
-        <nav style={{
-            display: "flex", gap: 16, padding: "10px 16px",
-            borderBottom: "1px solid #e5e7eb", marginBottom: 16
-        }}>
-            {/* Left: app navigation */}
-            <Link to="/welcome">Home</Link>
-            <Link to="/tasks">Tasks</Link>
-            <Link to="/teams">Teams</Link>
+        <nav
+            role="navigation"
+            aria-label="Main"
+            style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "10px 16px",
+                borderBottom: "1px solid #e5e7eb",
+                background: "#fafafa",
+                marginBottom: 16,
+            }}
+        >
+            {/* Left: app links (only when authenticated) */}
+            {authed ? (
+                <>
+                    <NavLink to="/welcome" style={linkStyle}>Home</NavLink>
+                    <NavLink to="/tasks" style={linkStyle}>Tasks</NavLink>
+                    <NavLink to="/teams" style={linkStyle}>Teams</NavLink>
+                    <NavLink to="/history" style={linkStyle}>History</NavLink>
+                </>
+            ) : null}
 
             {/* Right: user area */}
             <div style={{ marginLeft: "auto", display: "flex", gap: 12, alignItems: "center" }}>
@@ -36,12 +61,14 @@ export default function Navbar() {
                     </>
                 ) : (
                     <>
-                        <Link to="/">Sign in</Link>
-                        <Link to="/register">Sign up</Link>
+                        <NavLink to="/" style={linkStyle}>Sign in</NavLink>
+                        <NavLink to="/register" style={linkStyle}>Sign up</NavLink>
                     </>
                 )}
             </div>
-            {onTeamRoute && <CreateTeamButton small />}
+
+            {/* Contextual action: only on team routes and when authenticated */}
+            {authed && onTeamRoute ? <CreateTeamButton small /> : null}
         </nav>
     );
 }

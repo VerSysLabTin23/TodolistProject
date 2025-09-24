@@ -41,6 +41,7 @@ export default function TeamsPage() {
             <h1 style={{ marginBottom: 12 }}>My Teams</h1>
             <CreateTeamButton
                 small
+                redirectToNew={false}
                 onCreated={(team) => setTeams((prev) => [team, ...prev])}
             />
             {teams.length === 0 ? (
