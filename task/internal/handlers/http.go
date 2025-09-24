@@ -171,7 +171,7 @@ func (h *TaskHandlers) CreateTaskInTeam(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, models.MapTask(*t))
 
-	// Emit task.created event (best-effort)
+	// Emit task.created event
 	if h.producer != nil {
 		_ = h.producer.TaskCreated(context.Background(), t.ID, t.TeamID, creatorID, t.CreatorID, t.AssigneeID, map[string]any{
 			"title":       t.Title,
@@ -412,8 +412,18 @@ func (h *TaskHandlers) DeleteTask(c *gin.Context) {
 		return
 	}
 
-	// TODO: Add additional permission check - only team owner and admin can delete tasks
-	// For now, all team members can delete tasks
+	// Permission: only creator, team admin, or owner can delete
+	if userID != t.CreatorID {
+		role, err := h.teamClient.GetUserRoleInTeam(userID, t.TeamID, token)
+		if err != nil {
+			c.JSON(http.StatusForbidden, errResp("FORBIDDEN", "insufficient permissions to delete task"))
+			return
+		}
+		if role != "owner" && role != "admin" {
+			c.JSON(http.StatusForbidden, errResp("FORBIDDEN", "only owner/admin/creator can delete task"))
+			return
+		}
+	}
 
 	if err := h.repo.Delete(id); err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", err.Error()))

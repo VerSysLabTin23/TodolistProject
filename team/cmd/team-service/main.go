@@ -54,8 +54,8 @@ func main() {
 	// Health check
 	r.GET("/healthz", h.HealthCheck)
 
-	// Internal service endpoints (no auth required for service-to-service communication)
-	r.GET("/internal/teams/:id/members", h.GetTeamMembers)
+	// Internal service endpoints (protected by internal token)
+	r.GET("/internal/teams/:id/members", middleware.RequireInternalToken(), h.GetTeamMembers)
 
 	// Public endpoints
 	r.GET("/teams", h.ListTeams)
@@ -63,8 +63,9 @@ func main() {
 	r.GET("/teams/:id", h.GetTeam)
 	r.GET("/users/:userId/teams", h.GetUserTeams)
 
-	// Team management (requires team membership)
-	r.PUT("/teams/:id", auth.RequireTeamMembership(), h.UpdateTeam)
+	// Team management
+	// Only owner can update/delete team
+	r.PUT("/teams/:id", auth.RequireTeamOwner(), h.UpdateTeam)
 	r.DELETE("/teams/:id", auth.RequireTeamOwner(), h.DeleteTeam)
 
 	// Team membership management (requires admin privileges)

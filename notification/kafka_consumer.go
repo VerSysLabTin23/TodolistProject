@@ -81,7 +81,8 @@ func startKafkaConsumer(ctx context.Context, authClient *AuthClient, emailSender
 					continue
 				}
 
-				log.Printf("[kafka] %s key=%s value=%s", tp, string(m.Key), string(m.Value))
+				// log.Printf("[kafka] %s key=%s value=%s", tp, string(m.Key), string(m.Value))
+				log.Printf("[kafka] topic=%s key=%s value_len=%d", tp, string(m.Key), len(m.Value))
 
 				// Parse the event based on topic
 				switch tp {

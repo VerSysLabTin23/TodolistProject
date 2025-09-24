@@ -68,6 +68,7 @@ services:
       DB_NAME: "teamsdb"
       AUTH_SERVICE_URL: "http://auth-service:8084"
       KAFKA_BROKERS: "dev_kafka:9092"
+      INTERNAL_TOKEN: "dev-internal-token"
     ports:
       - "8083:8083"
     networks: [app-net]
@@ -121,21 +122,21 @@ services:
     networks: [app-net]
 
   # Task phpMyAdmin
-  task-phpmyadmin:
-    image: phpmyadmin:latest
-    container_name: task_phpmyadmin
-    depends_on:
-      task-db:
-        condition: service_healthy
-    environment:
-      PMA_HOST: task-db      
-      PMA_PORT: 3306
-      PMA_USER: root
-      PMA_PASSWORD: pass
-      UPLOAD_LIMIT: 64M      
-    ports:
-      - "8082:80"              
-    networks: [app-net]
+  # task-phpmyadmin:
+  #   image: phpmyadmin:latest
+  #   container_name: task_phpmyadmin
+  #   depends_on:
+  #     task-db:
+  #       condition: service_healthy
+  #   environment:
+  #     PMA_HOST: task-db      
+  #     PMA_PORT: 3306
+  #     PMA_USER: root
+  #     PMA_PASSWORD: pass
+  #     UPLOAD_LIMIT: 64M      
+  #   ports:
+  #     - "8082:80"              
+  #   networks: [app-net]
 
   # Team phpMyAdmin
   # team-phpmyadmin:
@@ -210,21 +211,21 @@ services:
       - "8084:8084"
     networks: [app-net]
 
-  auth-phpmyadmin:
-    image: phpmyadmin:latest
-    container_name: auth_phpmyadmin
-    depends_on:
-      auth-db:
-        condition: service_healthy
-    environment:
-      PMA_HOST: auth-db
-      PMA_PORT: 3306
-      PMA_USER: root
-      PMA_PASSWORD: pass
-      UPLOAD_LIMIT: 64M
-    ports:
-      - "8085:80"
-    networks: [app-net]
+  # auth-phpmyadmin:
+  #   image: phpmyadmin:latest
+  #   container_name: auth_phpmyadmin
+  #   depends_on:
+  #     auth-db:
+  #       condition: service_healthy
+  #   environment:
+  #     PMA_HOST: auth-db
+  #     PMA_PORT: 3306
+  #     PMA_USER: root
+  #     PMA_PASSWORD: pass
+  #     UPLOAD_LIMIT: 64M
+  #   ports:
+  #     - "8085:80"
+  #   networks: [app-net]
 
   notification:
     build:
@@ -259,6 +260,9 @@ services:
     environment:
       KAFKA_BROKERS: "dev_kafka:9092"
       PORT: "8086"
+      ALLOWED_WS_ORIGINS: "http://localhost,http://localhost:5173"
+      INTERNAL_TOKEN: "dev-internal-token"
+      WS_ALLOW_USERID_QUERY: "true"
     ports:
       - "8086:8086"
     networks: [app-net]
@@ -276,6 +280,19 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
       - "80:80"
+    networks: [app-net]
+
+  # Frontend (built static, served by its own nginx)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ./dockerfile
+    container_name: frontend
+    depends_on:
+      - auth-service
+      - task-service
+      - team-service
+      - realtime
     networks: [app-net]
 
   # Mailpit - dev SMTP + web UI
@@ -305,7 +322,7 @@ services:
       - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@dev_kafka:9093
       - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://dev_kafka:9092
       - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
-      - KAFKA_CFG_NUM_PARTITIONS=3 
+      - KAFKA_CFG_NUM_PARTITIONS=3 # By default 1
       - KAFKA_KRAFT_CLUSTER_ID=q1w2e3r4t5y6u7i8o9p0zxcvbnmasdf # dev-only
     ports:
       - "9092:9092"
