@@ -25,35 +25,19 @@ export interface Options {
     onEvent?: (e: TaskEvent) => void;
     onStatus?: (s: Status) => void;
     baseUrl?: string;       // default /ws
-    userId?: number | null; // default from localStorage.currentUser.id
-    token?: string | null;  // optional fallback
 }
 
-function readUserId(): number | null {
-    try {
-        const raw = localStorage.getItem("currentUser");
-        if (!raw) return null;
-        const obj = JSON.parse(raw);
-        return typeof obj?.id === "number" ? obj.id : null;
-    } catch {
-        return null;
-    }
+function readAccessToken(): string | null {
+    return localStorage.getItem("accessToken");
 }
 
 export function connectTaskWS(opts: Options = {}) {
     const base = opts.baseUrl ?? (import.meta.env.VITE_WS_URL ?? "/ws");
-    const uid = opts.userId ?? readUserId();
-    const token = opts.token ?? localStorage.getItem("accessToken") ?? "";
+    const token = readAccessToken();
 
-    // Prefer userId, fallback to token if needed by backend
-    const qs =
-        uid != null
-            ? `userId=${encodeURIComponent(String(uid))}`
-            : `token=${encodeURIComponent(token)}`;
-
-    const url = `${base}?${qs}`;
-
-    const ws = new WebSocket(url);
+    // Use raw JWT as subprotocol. Spaces are not allowed in subprotocol values.
+    const protocols: string[] = token ? [token] : [];
+    const ws = new WebSocket(base, protocols);
     opts.onStatus?.("connecting");
 
     ws.onopen = () => opts.onStatus?.("connected");
@@ -70,11 +54,7 @@ export function connectTaskWS(opts: Options = {}) {
     ws.onclose  = () => opts.onStatus?.("closed");
     ws.onerror  = () => opts.onStatus?.("error");
 
-    return {
-        close() {
-            try { ws.close(); } catch { /* ignore */ }
-        },
-    };
+    return { close() { try { ws.close(); } catch { /* ignore */ } } };
 }
 
 /** Small React hook to show status in the UI if you want */

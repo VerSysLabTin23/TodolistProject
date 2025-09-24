@@ -31,12 +31,12 @@ export type RegisterRequest = {
 type ApiErrorBody = { message?: string; code?: string };
 
 export async function login(data: LoginRequest): Promise<LoginResponse> {
-    const { data: res } = await http.post<LoginResponse>("/auth/login", data);
+    const { data: res } = await http.post<LoginResponse>("/login", data);
     return res;
 }
 
 export async function register(data: RegisterRequest): Promise<UserResponse> {
-    const { data: res } = await http.post<UserResponse>("/auth/register", data);
+    const { data: res } = await http.post<UserResponse>("/register", data);
     return res;
 }
 
