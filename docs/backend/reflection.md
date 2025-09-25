@@ -11,10 +11,10 @@
 - Distributed System Complexity: Required careful error handling and monitoring across services
 - Data Format and Schema Inconsistencies: The most challenging issue was handling different data formats between services
 
-Take a bug for example:  
-The backend sent a time.Time object for the due field in the Kafka event payload.  
-However, the frontend expected a string in "YYYY-MM-DD" format.  
-This mismatch caused WebSocket events to fail silently. The frontend would receive the event but couldn't parse the due field, leading to incomplete task updates that required manual page refresh. The issue took so much time to debug because the WebSocket connection appeared to be working, but the data parsing was failing silently.
+*Take a bug for example:*  
+    The backend sent a time.Time object for the due field in the Kafka event payload.  
+    However, the frontend expected a string in "YYYY-MM-DD" format.  
+    This mismatch caused WebSocket events to fail silently. The frontend would receive the event but couldn't parse the due field, leading to incomplete task updates that required manual page refresh. The issue took so much time to debug because the WebSocket connection appeared to be working, but the data parsing was failing silently.
 
 ## What I'd Do Differently
 - Architecture: comprehensive monitoring (Prometheus/Grafana)
