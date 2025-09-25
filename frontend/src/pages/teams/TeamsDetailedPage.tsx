@@ -8,10 +8,10 @@ import {
     deleteTask,
     type Task,
 } from "../../api/task";
-import CreateTeamButton from "../../components/CreateTeamButton";
 import { type TaskEvent } from "../../realtime/ws";
 import {useRealtime} from "../../realtime/useRealtime";
-import {patchFromEventPayload} from "../../realtime/eventPatch.ts";
+import {patchFromEventPayload} from "../../realtime/eventPatch";
+
 
 type NewTaskForm = {
     title: string;
@@ -157,8 +157,6 @@ export default function TeamDetailsPage() {
             <h1 style={{ marginBottom: 12 }}>
                 Team: {teamName || `#${teamId}`}{" "}
             </h1>
-
-            <CreateTeamButton small />
 
             {/* Create task */}
             <form

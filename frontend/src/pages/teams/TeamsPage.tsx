@@ -59,8 +59,8 @@ export default function TeamsPage() {
                                 marginBottom: 10,
                                 background: "#fff",
                             }}>
-                            <Link to={`/teams/${tm.id}`} style={{ textDecoration: "none" }}>
-                                <strong>{tm.name}</strong>
+                            <Link to="/teams/new">
+                                <button>Create team</button>
                             </Link>
                             {tm.description ? (
                                 <div style={{ fontSize: 12, color: "#6b7280" }}>{tm.description}</div>

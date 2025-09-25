@@ -1,51 +1,105 @@
-import axios from "axios";
-
 /**
- * Axios client for the Team service.
- * Uses Vite proxy: '/team-api' -> http://localhost:8083
+ * HTTP client for the Team service.
+ * Vite proxy: '/team-api' -> http://localhost:8083
  * Sends Authorization header (JWT) if present.
  */
-const teamBaseURL = import.meta.env.VITE_TEAM_API_BASE_URL ?? "/team-api";
 
-const httpTeam = axios.create({ baseURL: teamBaseURL });
-httpTeam.interceptors.request.use((config) => {
-    const token = localStorage.getItem("accessToken");
-    if (token) config.headers.Authorization = `Bearer ${token}`;
-    return config;
-});
+export type TeamRole = "owner" | "admin" | "member";
 
-export type TeamMember = {
-    id: number;
-    username: string;
-    role: "owner" | "admin" | "member";
+export type CreateTeamInput = {
+    name: string;
+    description?: string;
 };
 
-export interface Team {
+export type Team = {
     id: number;
     name: string;
     description?: string;
-    ownerId?: number;
-    createdAt?: string;
-    updatedAt?: string;
+};
+
+export type TeamMember = {
+    id: number;            // userId
+    username: string;
+    role: TeamRole;
+};
+
+function getAccessToken(): string {
+    return localStorage.getItem("accessToken") ?? "";
 }
 
-/**
- * Returns teams for a given user.
- * Matches backend route: GET /users/:userId/teams
- */
+async function authFetch(url: string, init?: RequestInit) {
+    const token = getAccessToken();
+    const headers = new Headers(init?.headers);
+
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    headers.set("Accept", "application/json");
+    if (!(init?.body instanceof FormData)) {
+        headers.set("Content-Type", "application/json");
+    }
+
+    const res = await fetch(url, { ...init, headers });
+    if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(`${res.status} ${res.statusText} ${txt}`);
+    }
+    return res;
+}
+
+const TEAM_API = "/team-api";
+
+/* ----------------- Mutations ----------------- */
+
+// Create a team
+export async function createTeam(input: CreateTeamInput): Promise<Team> {
+    const res = await authFetch(`${TEAM_API}/teams`, {
+        method: "POST",
+        body: JSON.stringify(input),
+    });
+    return res.json() as Promise<Team>;
+}
+
+// Add a member (useful to assert the creator as 'owner' if backend didn’t)
+export async function addMember(
+    teamId: number,
+    userId: number,
+    role: TeamRole
+): Promise<TeamMember> {
+    const res = await authFetch(`${TEAM_API}/teams/${teamId}/members`, {
+        method: "POST",
+        body: JSON.stringify({ userId, role }),
+    });
+    return res.json() as Promise<TeamMember>;
+}
+
+// Invite by username (optional helper)
+export async function inviteByUsername(
+    teamId: number,
+    username: string,
+    role: TeamRole = "member"
+): Promise<TeamMember> {
+    const res = await authFetch(`${TEAM_API}/teams/${teamId}/members/invite`, {
+        method: "POST",
+        body: JSON.stringify({ username, role }),
+    });
+    return res.json() as Promise<TeamMember>;
+}
+
+/* ----------------- Queries ----------------- */
+
+// A user’s teams
 export async function listUserTeams(userId: number): Promise<Team[]> {
-    const { data } = await httpTeam.get<Team[]>(`/users/${userId}/teams`);
-    return data;
+    const res = await authFetch(`${TEAM_API}/users/${userId}/teams`);
+    return res.json() as Promise<Team[]>;
 }
+
+// Team by id
 export async function getTeamById(teamId: number): Promise<Team> {
-    const { data } = await httpTeam.get<Team>(`/teams/${teamId}`);
-    return data;
+    const res = await authFetch(`${TEAM_API}/teams/${teamId}`);
+    return res.json() as Promise<Team>;
 }
-export async function createTeam(body: { name: string; description?: string }) {
-    const { data } = await httpTeam.post<Team>("/teams", body);
-    return data;
-}
+
+// Members of a team
 export async function listTeamMembers(teamId: number): Promise<TeamMember[]> {
-    const { data } = await httpTeam.get<TeamMember[]>(`/teams/${teamId}/members`);
-    return data;
+    const res = await authFetch(`${TEAM_API}/teams/${teamId}/members`);
+    return res.json() as Promise<TeamMember[]>;
 }

@@ -12,6 +12,7 @@ import TeamsPage from "./pages/teams/TeamsPage";
 import TeamsDetailedPage from "./pages/teams/TeamsDetailedPage";
 import NotFoundPage from "./pages/NotFound.tsx";
 import TaskDetailsPage from "./pages/tasks/DetailedTaskPage";
+import CreateTeamPage from "./pages/teams/CreateTeamPage";
 
 export default function App() {
     return (
@@ -28,6 +29,7 @@ export default function App() {
                     <Route element={<RequireAuth />}>
                         <Route path="/welcome" element={<WelcomePage />} />
                         <Route path="/teams" element={<TeamsPage />} />
+                        <Route path="/teams/new" element={<CreateTeamPage />} />
                         <Route path="/teams/:id" element={<TeamsDetailedPage />} />
                         <Route path="/tasks" element={<TasksPage />} />
                         <Route path="/tasks/:id" element={<TaskDetailsPage />} />
