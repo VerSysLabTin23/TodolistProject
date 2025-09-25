@@ -17,10 +17,14 @@ import RequireAdmin from "./routes/RequireAdmin.tsx";
 import UsersAdminPage from "./pages/admin/UsersAdminPage.tsx";
 import TeamsAdminPage from "./pages/admin/TeamsAdminPage.tsx";
 import TeamAdminDetailPage from "./pages/admin/TeamAdminDetailPage.tsx";
+import RealtimeRoot from "./realtime/RealtimeRoot";
+import CompletedPage from "./pages/CompletedPage";
 
 export default function App() {
     return (
         <BrowserRouter>
+            <RealtimeRoot />  {/* keep WS alive globally */}
+
             {/* Public (no navbar) */}
             <Routes>
                 <Route element={<AuthLayout />}>
@@ -38,6 +42,7 @@ export default function App() {
                         <Route path="/tasks" element={<TasksPage />} />
                         <Route path="/tasks/:id" element={<TaskDetailsPage />} />
                         <Route path="*" element={<NotFoundPage />} />
+                        <Route path="/completed" element={<CompletedPage />} />
                     </Route>
                 </Route>
 

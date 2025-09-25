@@ -11,7 +11,10 @@ export const http = axios.create({
 // optional: attach token automatically if present
 http.interceptors.request.use((config) => {
     const token = localStorage.getItem("accessToken");
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    if (token) {
+        config.headers = config.headers ?? {};
+        (config.headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
+    }
     return config;
 });
 

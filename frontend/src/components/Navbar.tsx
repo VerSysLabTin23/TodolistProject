@@ -46,6 +46,7 @@ export default function Navbar() {
                     <NavLink to="/welcome" style={linkStyle}>Home</NavLink>
                     <NavLink to="/tasks" style={linkStyle}>Tasks</NavLink>
                     <NavLink to="/teams" style={linkStyle}>Teams</NavLink>
+
                 </>
             ) : null}
 
@@ -62,6 +63,9 @@ export default function Navbar() {
                     <>
                         <NavLink to="/" style={linkStyle}>Sign in</NavLink>
                         <NavLink to="/register" style={linkStyle}>Sign up</NavLink>
+                        <NavLink to="/completed" style={linkStyle}>
+                            Completed
+                        </NavLink>
                     </>
                 )}
             </div>

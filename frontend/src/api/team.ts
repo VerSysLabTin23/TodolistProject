@@ -45,7 +45,7 @@ async function authFetch(url: string, init?: RequestInit) {
     return res;
 }
 
-const TEAM_API = "/api";
+const TEAM_API = "/team-api";
 /* -------- Mutations -------- */
 
 export async function createTeam(input: CreateTeamInput): Promise<Team> {
