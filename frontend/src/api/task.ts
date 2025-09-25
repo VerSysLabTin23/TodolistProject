@@ -1,54 +1,77 @@
-import axios from "axios";
-
-const httpTask = axios.create({
-    baseURL: import.meta.env.VITE_TASK_API_BASE_URL ?? "/task-api",
-});
-httpTask.interceptors.request.use((c) => {
-    const t = localStorage.getItem("accessToken");
-    if (t) c.headers.Authorization = `Bearer ${t}`;
-    return c;
-});
+// src/api/task.ts
+import { http } from "./http";
 
 export type Task = {
-    id: number; teamId: number; title: string;
-    description?: string; priority?: "low"|"medium"|"high";
-    due?: string; assigneeId?: number; completed?: boolean;
-    createdAt?: string; updatedAt?: string;
+    id: number;
+    teamId: number;
+    title: string;
+    description?: string;
+    priority?: "low" | "medium" | "high";
+    due?: string;
+    assigneeId?: number | null;
+    completed: boolean;
+    // used by UI pages:
+    createdAt?: string;
+    updatedAt?: string;
 };
 
+export type CreateTaskInput = {
+    title: string;
+    description?: string;
+    priority?: "low" | "medium" | "high";
+    due?: string;
+    assigneeId?: number | null;
+};
+
+// === Lists ===
+
+// Cross-team “my tasks” → GET /api/tasks
 export async function listMyTasks(): Promise<Task[]> {
-    const { data } = await httpTask.get<Task[]>("/tasks"); // aggregate
+    const { data } = await http.get<Task[]>("/tasks");
     return data;
 }
+
+// Team tasks → GET /api/tasks/teams/:teamId/tasks
 export async function listTasksForTeam(teamId: number): Promise<Task[]> {
-    const { data } = await httpTask.get<Task[]>(`/teams/${teamId}/tasks`);
+    const { data } = await http.get<Task[]>(`/tasks/teams/${teamId}/tasks`);
     return data;
 }
-export async function createTaskInTeam(teamId: number, body: {
-    title: string; description?: string; priority: "low"|"medium"|"high"; due: string; assigneeId?: number;
-}): Promise<Task> {
-    const { data } = await httpTask.post<Task>(`/teams/${teamId}/tasks`, body);
+
+// === Create ===
+
+// Create within a team → POST /api/tasks/teams/:teamId/tasks
+export async function createTaskInTeam(teamId: number, input: CreateTaskInput): Promise<Task> {
+    const { data } = await http.post<Task>(`/tasks/teams/${teamId}/tasks`, input);
     return data;
 }
-export async function updateTask(id: number, body: Partial<{
-    title: string; description?: string; completed: boolean;
-    priority: "low"|"medium"|"high"; due: string; assigneeId?: number|null;
-}>): Promise<Task> {
-    const { data } = await httpTask.put<Task>(`/tasks/${id}`, body);
-    return data;
-}
-export async function deleteTask(id: number): Promise<void> {
-    await httpTask.delete(`/tasks/${id}`);
-}
-export async function setAssignee(id: number, assigneeId?: number|null): Promise<Task> {
-    const { data } = await httpTask.put<Task>(`/tasks/${id}/assignee`, { assigneeId });
-    return data;
-}
-export async function setCompleted(id: number, completed: boolean): Promise<Task> {
-    const { data } = await httpTask.post<Task>(`/tasks/${id}/complete`, { completed });
-    return data;
-}
+
+// === Single task ===
+
+// GET /api/tasks/:id
 export async function getTask(id: number): Promise<Task> {
-    const { data } = await httpTask.get<Task>(`/tasks/${id}`);
+    const { data } = await http.get<Task>(`/tasks/${id}`);
+    return data;
+}
+
+// PUT /api/tasks/:id
+export async function updateTask(id: number, patch: Partial<CreateTaskInput> & { completed?: boolean }): Promise<Task> {
+    const { data } = await http.put<Task>(`/tasks/${id}`, patch);
+    return data;
+}
+
+// DELETE /api/tasks/:id
+export async function deleteTask(id: number): Promise<void> {
+    await http.delete<void>(`/tasks/${id}`);
+}
+
+// PUT /api/tasks/:id/assignee
+export async function setAssignee(id: number, assigneeId?: number | null): Promise<Task> {
+    const { data } = await http.put<Task>(`/tasks/${id}/assignee`, { assigneeId });
+    return data;
+}
+
+// POST /api/tasks/:id/complete
+export async function setCompleted(id: number, completed: boolean): Promise<Task> {
+    const { data } = await http.post<Task>(`/tasks/${id}/complete`, { completed });
     return data;
 }

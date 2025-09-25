@@ -45,8 +45,7 @@ async function authFetch(url: string, init?: RequestInit) {
     return res;
 }
 
-const TEAM_API = "/team-api";
-
+const TEAM_API = "/api";
 /* -------- Mutations -------- */
 
 export async function createTeam(input: CreateTeamInput): Promise<Team> {
@@ -112,7 +111,7 @@ export async function adminListAllTeams(): Promise<Team[]> {
 /** ADMIN: update team (name/description) */
 export async function adminUpdateTeam(teamId: number, patch: TeamPatch): Promise<Team> {
     const res = await authFetch(`${TEAM_API}/teams/${teamId}`, {
-        method: "PATCH",
+        method: "PUT",
         body: JSON.stringify(patch),
     });
     return res.json() as Promise<Team>;
