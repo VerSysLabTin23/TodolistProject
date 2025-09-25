@@ -266,8 +266,6 @@ services:
       WS_ALLOW_USERID_QUERY: ${WS_ALLOW_USERID_QUERY:-true}
       TEAM_API_URL: http://team-service:8083
       AUTH_SERVICE_URL: http://auth-service:8084
-    ports:
-      - "8086:8086"
     networks: [app-net]
 
   # Nginx reverse proxy
