@@ -121,40 +121,6 @@ services:
       - "8081:8081"
     networks: [app-net]
 
-  # Task phpMyAdmin
-  # task-phpmyadmin:
-  #   image: phpmyadmin:latest
-  #   container_name: task_phpmyadmin
-  #   depends_on:
-  #     task-db:
-  #       condition: service_healthy
-  #   environment:
-  #     PMA_HOST: task-db      
-  #     PMA_PORT: 3306
-  #     PMA_USER: root
-  #     PMA_PASSWORD: pass
-  #     UPLOAD_LIMIT: 64M      
-  #   ports:
-  #     - "8082:80"              
-  #   networks: [app-net]
-
-  # Team phpMyAdmin
-  # team-phpmyadmin:
-  #   image: phpmyadmin:latest
-  #   container_name: team_phpmyadmin
-  #   depends_on:
-  #     team-db:
-  #       condition: service_healthy
-  #   environment:
-  #     PMA_HOST: team-db
-  #     PMA_PORT: 3306
-  #     PMA_USER: root
-  #     PMA_PASSWORD: pass
-  #     UPLOAD_LIMIT: 64M
-  #   ports:
-  #     - "8088:80"
-  #   networks: [app-net]
-
   auth-db:
     image: mysql:8.0
     container_name: auth_mysql
@@ -211,21 +177,6 @@ services:
       - "8084:8084"
     networks: [app-net]
 
-  # auth-phpmyadmin:
-  #   image: phpmyadmin:latest
-  #   container_name: auth_phpmyadmin
-  #   depends_on:
-  #     auth-db:
-  #       condition: service_healthy
-  #   environment:
-  #     PMA_HOST: auth-db
-  #     PMA_PORT: 3306
-  #     PMA_USER: root
-  #     PMA_PASSWORD: pass
-  #     UPLOAD_LIMIT: 64M
-  #   ports:
-  #     - "8085:80"
-  #   networks: [app-net]
 
   notification:
     build:

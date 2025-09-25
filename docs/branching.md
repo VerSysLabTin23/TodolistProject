@@ -77,8 +77,7 @@ Use lowercase and dashes.
 	git push origin --delete feature/<task-name>
 
 ```
-
----
+___
 ## 5. Merge and CI 
 
 - `main` should be a protected branch (no direct pushes)
@@ -86,4 +85,5 @@ Use lowercase and dashes.
 - Merges are only allowed after successful CI
 - "Squash and merge" is recommended to keep history clean
 
----
+\newpage
+
