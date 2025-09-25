@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { listUserTeams, type Team } from "../../api/team";
 import CreateTeamButton from "../../components/CreateTeamButton";
 
@@ -57,19 +56,17 @@ export default function TeamsPage() {
             ) : (
                 <ul style={{ listStyle: "none", padding: 0, margin: 12 }}>
                     {teams.map((tm) => (
-                        <li
-                            key={tm.id}
+                        <li key={tm.id}
                             style={{
                                 padding: "10px 12px",
                                 border: "1px solid #e5e7eb",
                                 borderRadius: 8,
                                 marginBottom: 10,
                                 background: "#fff",
-                            }}
-                        >
-                            <Link to={`/teams/${tm.id}`} style={{ textDecoration: "none" }}>
+                            }}>
+                            <a href={`/teams/${tm.id}`} style={{ textDecoration: "none" }}>
                                 <strong>{tm.name}</strong>
-                            </Link>
+                            </a>
                             {tm.description ? (
                                 <div style={{ fontSize: 12, color: "#6b7280" }}>{tm.description}</div>
                             ) : null}

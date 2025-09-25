@@ -4,7 +4,7 @@
  * Sends Authorization header (JWT) if present.
  */
 
-export type TeamRole = "owner" | "admin" | "member";
+export type TeamRole = "OWNER" | "ADMIN" | "MEMBER";
 
 export type CreateTeamInput = {
     name: string;
@@ -18,7 +18,7 @@ export type Team = {
 };
 
 export type TeamMember = {
-    id: number;            // userId
+    id: number;          // userId
     username: string;
     role: TeamRole;
 };
@@ -47,9 +47,8 @@ async function authFetch(url: string, init?: RequestInit) {
 
 const TEAM_API = "/team-api";
 
-/* ----------------- Mutations ----------------- */
+/* -------- Mutations -------- */
 
-// Create a team
 export async function createTeam(input: CreateTeamInput): Promise<Team> {
     const res = await authFetch(`${TEAM_API}/teams`, {
         method: "POST",
@@ -58,7 +57,6 @@ export async function createTeam(input: CreateTeamInput): Promise<Team> {
     return res.json() as Promise<Team>;
 }
 
-// Add a member (useful to assert the creator as 'owner' if backend didn’t)
 export async function addMember(
     teamId: number,
     userId: number,
@@ -66,16 +64,15 @@ export async function addMember(
 ): Promise<TeamMember> {
     const res = await authFetch(`${TEAM_API}/teams/${teamId}/members`, {
         method: "POST",
-        body: JSON.stringify({ userId, role }),
+        body: JSON.stringify({ userId, role }), // role must be upper-case
     });
     return res.json() as Promise<TeamMember>;
 }
 
-// Invite by username (optional helper)
 export async function inviteByUsername(
     teamId: number,
     username: string,
-    role: TeamRole = "member"
+    role: TeamRole = "MEMBER"
 ): Promise<TeamMember> {
     const res = await authFetch(`${TEAM_API}/teams/${teamId}/members/invite`, {
         method: "POST",
@@ -84,21 +81,18 @@ export async function inviteByUsername(
     return res.json() as Promise<TeamMember>;
 }
 
-/* ----------------- Queries ----------------- */
+/* -------- Queries -------- */
 
-// A user’s teams
 export async function listUserTeams(userId: number): Promise<Team[]> {
     const res = await authFetch(`${TEAM_API}/users/${userId}/teams`);
     return res.json() as Promise<Team[]>;
 }
 
-// Team by id
 export async function getTeamById(teamId: number): Promise<Team> {
     const res = await authFetch(`${TEAM_API}/teams/${teamId}`);
     return res.json() as Promise<Team>;
 }
 
-// Members of a team
 export async function listTeamMembers(teamId: number): Promise<TeamMember[]> {
     const res = await authFetch(`${TEAM_API}/teams/${teamId}/members`);
     return res.json() as Promise<TeamMember[]>;
