@@ -1,6 +1,7 @@
+// src/pages/teams/TeamsPage.tsx
 import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { listUserTeams, type Team } from "../../api/team";
-import CreateTeamButton from "../../components/CreateTeamButton";
 
 function useCurrentUserId(): number | null {
     return useMemo(() => {
@@ -9,9 +10,7 @@ function useCurrentUserId(): number | null {
             if (!raw) return null;
             const obj = JSON.parse(raw);
             return typeof obj?.id === "number" ? obj.id : null;
-        } catch {
-            return null;
-        }
+        } catch { return null; }
     }, []);
 }
 
@@ -19,14 +18,12 @@ export default function TeamsPage() {
     const userId = useCurrentUserId();
     const [teams, setTeams] = useState<Team[]>([]);
     const [loading, setLoading] = useState(true);
+    const location = useLocation();
 
     useEffect(() => {
         let cancel = false;
         async function load() {
-            if (!userId) {
-                setLoading(false);
-                return;
-            }
+            if (!userId) { setLoading(false); return; }
             try {
                 const t = await listUserTeams(userId);
                 if (!cancel) setTeams(t);
@@ -35,26 +32,24 @@ export default function TeamsPage() {
             }
         }
         load();
-        return () => {
-            cancel = true;
-        };
-    }, [userId]);
+        return () => { cancel = true; };
+    }, [userId, location.key]); // re-run when coming back from CreateTeamPage
 
     if (loading) return <div>Loading…</div>;
 
     return (
         <section style={{ maxWidth: 900, margin: "0 auto" }}>
-            <h1 style={{ marginBottom: 12 }}>My Teams</h1>
-
-            {/* Single create button at the top. No props. It navigates to /teams/new */}
-            <CreateTeamButton small />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <h1 style={{ margin: 0 }}>My Teams</h1>
+                <Link to="/teams/new"><button>Create team</button></Link>
+            </div>
 
             {teams.length === 0 ? (
-                <div style={{ color: "#6b7280", marginTop: 12 }}>
+                <div style={{ color: "#6b7280" }}>
                     You are not a member of any team yet.
                 </div>
             ) : (
-                <ul style={{ listStyle: "none", padding: 0, margin: 12 }}>
+                <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
                     {teams.map((tm) => (
                         <li key={tm.id}
                             style={{
@@ -64,9 +59,9 @@ export default function TeamsPage() {
                                 marginBottom: 10,
                                 background: "#fff",
                             }}>
-                            <a href={`/teams/${tm.id}`} style={{ textDecoration: "none" }}>
+                            <Link to={`/teams/${tm.id}`} style={{ textDecoration: "none" }}>
                                 <strong>{tm.name}</strong>
-                            </a>
+                            </Link>
                             {tm.description ? (
                                 <div style={{ fontSize: 12, color: "#6b7280" }}>{tm.description}</div>
                             ) : null}
