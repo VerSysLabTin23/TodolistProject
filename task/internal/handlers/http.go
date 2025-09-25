@@ -410,7 +410,7 @@ func (h *TaskHandlers) UpdateTask(c *gin.Context) {
 			"completed":   t.Completed,
 			"priority":    string(t.Priority),
 			"description": t.Description,
-			"due":         t.Due,
+			"due":         t.Due.Format("2006-01-02"), // Format as YYYY-MM-DD string
 			"assigneeId":  t.AssigneeID,
 		})
 	}

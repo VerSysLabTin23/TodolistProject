@@ -58,9 +58,12 @@ function notifyStatus(s: Status) {
 }
 
 function normalizeEvent(raw: any): TaskEvent | null {
+    // Handle legacy format with "eventType" field
     if (raw && typeof raw === "object" && "eventType" in raw) {
         return raw as TaskEvent;
     }
+    
+    // Handle new UnifiedEvent format from realtime service
     if (raw && typeof raw === "object" && "type" in raw) {
         const type = String(raw.type);
         if (type.startsWith("task.")) {
@@ -123,16 +126,35 @@ function ensureConnected() {
     socket.onmessage = (msg: MessageEvent<string>) => {
         try {
             const parsed = JSON.parse(msg.data);
+            if (DEBUG) {
+                try { console.log("WS RAW MESSAGE:", parsed); } catch { /* ignore */ }
+            }
             const evt = normalizeEvent(parsed);
             if (evt) {
                 if (DEBUG) {
-                    try { console.log("WS EVT:", evt); } catch { /* ignore */ }
+                    try { console.log("WS NORMALIZED EVENT:", evt); } catch { /* ignore */ }
                 }
                 eventListeners.forEach((fn) => {
-                    try { fn(evt); } catch { /* ignore */ }
+                    try { 
+                        fn(evt); 
+                        if (DEBUG) {
+                            try { console.log("WS EVENT HANDLER CALLED for event:", evt.eventType); } catch { /* ignore */ }
+                        }
+                    } catch (error) { 
+                        if (DEBUG) {
+                            try { console.error("WS EVENT HANDLER ERROR:", error); } catch { /* ignore */ }
+                        }
+                    }
                 });
+            } else {
+                if (DEBUG) {
+                    try { console.warn("WS MESSAGE COULD NOT BE NORMALIZED:", parsed); } catch { /* ignore */ }
+                }
             }
-        } catch {
+        } catch (error) {
+            if (DEBUG) {
+                try { console.error("WS MESSAGE PARSE ERROR:", error, "Raw data:", msg.data); } catch { /* ignore */ }
+            }
             notifyStatus("error");
         }
     };

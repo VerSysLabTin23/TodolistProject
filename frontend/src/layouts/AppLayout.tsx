@@ -7,7 +7,19 @@ import { isAuthenticated } from "../auth/session";
 export default function AppLayout() {
     useEffect(() => {
         if (!isAuthenticated()) return;
-        const sub = connectTaskWS({});
+        
+        // Enable debug mode in localStorage to see WebSocket logs
+        if (import.meta.env.DEV) {
+            localStorage.setItem("WS_DEBUG", "1");
+        }
+        
+        // Connect WebSocket but don't handle events here - individual pages will handle them
+        const sub = connectTaskWS({
+            onStatus: (status) => {
+                console.log(`WebSocket status: ${status}`);
+            }
+        });
+        
         return () => sub.close();
     }, []);
 

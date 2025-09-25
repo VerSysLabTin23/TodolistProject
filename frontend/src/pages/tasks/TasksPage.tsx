@@ -45,16 +45,22 @@ export default function TasksPage() {
     useEffect(() => {
         const sub = connectTaskWS({
             onEvent: (evt: TaskEvent) => {
+                console.log(`[TasksPage] Processing ${evt.eventType} for task ${evt.taskId}`);
                 setTasks((prev) => {
                     switch (evt.eventType) {
                         case "task.deleted":
                             return prev.filter((t) => t.id !== evt.taskId);
                         case "task.created":
+                            // Only add if task doesn't already exist
+                            if (prev.find((t) => t.id === evt.taskId)) {
+                                return prev; // Task already exists, don't duplicate
+                            }
                             return [
                                 {
                                     id: evt.taskId,
                                     teamId: evt.teamId,
                                     title: String(evt.payload?.title ?? "New task"),
+                                    description: evt.payload?.description as string | undefined,
                                     priority: evt.payload?.priority as Task["priority"],
                                     due: evt.payload?.due as string | undefined,
                                     assigneeId:
@@ -62,13 +68,28 @@ export default function TasksPage() {
                                         (evt.assigneeId ?? undefined),
                                     completed: Boolean(evt.payload?.completed ?? false),
                                 },
-                                prev.find((t) => t.id === evt.taskId) ? prev.filter((t) => t.id !== evt.taskId) : prev
-                            ].flat();
+                                ...prev
+                            ];
                         case "task.updated":
                         case "task.completed":
-                            return prev.map((t) =>
-                                t.id === evt.taskId ? { ...t, ...(evt.payload as object) } : t
-                            );
+                            return prev.map((t) => {
+                                if (t.id === evt.taskId) {
+                                    const payload = evt.payload as any || {};
+                                    return {
+                                        ...t,
+                                        title: typeof payload.title === 'string' ? payload.title : t.title,
+                                        description: typeof payload.description === 'string' ? payload.description : 
+                                                   payload.description === undefined ? t.description : payload.description,
+                                        priority: (payload.priority === 'low' || payload.priority === 'medium' || payload.priority === 'high') 
+                                                 ? payload.priority : t.priority,
+                                        due: typeof payload.due === 'string' ? payload.due : t.due,
+                                        completed: typeof payload.completed === 'boolean' ? payload.completed : t.completed,
+                                        assigneeId: typeof payload.assigneeId === 'number' ? payload.assigneeId : 
+                                                   payload.assigneeId === null ? undefined : t.assigneeId,
+                                    } as Task;
+                                }
+                                return t;
+                            });
                         default:
                             return prev;
                     }

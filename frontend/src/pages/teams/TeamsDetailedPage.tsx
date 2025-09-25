@@ -68,7 +68,8 @@ export default function TeamDetailsPage() {
             onStatus: setWsStatus,
             onEvent: (evt: TaskEvent) => {
                 if (evt.teamId !== teamId) return;
-
+                
+                console.log(`[TeamDetailPage] Processing ${evt.eventType} for task ${evt.taskId}`);
                 setTasks((prev) => {
                     switch (evt.eventType) {
                         case "task.created":
@@ -91,9 +92,24 @@ export default function TeamDetailsPage() {
 
                         case "task.updated":
                         case "task.completed":
-                            return prev.map((t) =>
-                                t.id === evt.taskId ? { ...t, ...(evt.payload as object) } : t
-                            );
+                            return prev.map((t) => {
+                                if (t.id === evt.taskId) {
+                                    const payload = evt.payload as any || {};
+                                    return {
+                                        ...t,
+                                        title: typeof payload.title === 'string' ? payload.title : t.title,
+                                        description: typeof payload.description === 'string' ? payload.description : 
+                                                   payload.description === undefined ? t.description : payload.description,
+                                        priority: (payload.priority === 'low' || payload.priority === 'medium' || payload.priority === 'high') 
+                                                 ? payload.priority : t.priority,
+                                        due: typeof payload.due === 'string' ? payload.due : t.due,
+                                        completed: typeof payload.completed === 'boolean' ? payload.completed : t.completed,
+                                        assigneeId: typeof payload.assigneeId === 'number' ? payload.assigneeId : 
+                                                   payload.assigneeId === null ? undefined : t.assigneeId,
+                                    } as Task;
+                                }
+                                return t;
+                            });
 
                         case "task.deleted":
                             return prev.filter((t) => t.id !== evt.taskId);

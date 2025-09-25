@@ -256,12 +256,18 @@ services:
         condition: service_healthy
       auth-service:
         condition: service_started
+      team-service:
+        condition: service_started
     environment:
-      KAFKA_BROKERS: ${KAFKA_BROKERS}
-      PORT: ${PORT_REALTIME}
-      ALLOWED_WS_ORIGINS: ${ALLOWED_WS_ORIGINS}
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-dev_kafka:9092}
+      PORT: "8086"
+      ALLOWED_WS_ORIGINS: ${ALLOWED_WS_ORIGINS:-*}
       INTERNAL_TOKEN: ${INTERNAL_TOKEN}
-      WS_ALLOW_USERID_QUERY: ${WS_ALLOW_USERID_QUERY}
+      WS_ALLOW_USERID_QUERY: ${WS_ALLOW_USERID_QUERY:-true}
+      TEAM_API_URL: http://team-service:8083
+      AUTH_SERVICE_URL: http://auth-service:8084
+    ports:
+      - "8086:8086"
     networks: [app-net]
 
   # Nginx reverse proxy
