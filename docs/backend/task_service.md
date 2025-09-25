@@ -34,4 +34,6 @@ The service publishes events to **Kafka** for real-time updates:
 - **Repository**: `task/internal/repository/repository.go`  
 - **Events**: `task/internal/events/producer.go`  
 - **Migrations**: `task/migrations/`  
-- **API Spec**: `task/api/task.yml`  
+- **API Spec**: `task/api/task.yml`
+
+\newpage  

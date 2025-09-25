@@ -27,7 +27,9 @@ Consumes events from **Kafka** topics and sends appropriate notifications:
 - `user.*` — user-related notifications  
 
 ## Key Files
-- **Main Entry**: `notification/main.go`  
+- **Main Entry**: `notification/main.go`
+
+\newpage  
 - **Kafka Consumer**: `notification/kafka_consumer.go`  
 - **Email Sender**: `notification/email_sender.go`  
 - **Auth Client**: `notification/auth_client.go`  

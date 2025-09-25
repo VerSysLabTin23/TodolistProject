@@ -35,3 +35,5 @@ URL: http://localhost
 | admin | password |
 | john_doe | password |
 | jane_smith | password |
+
+\newpage

@@ -1,0 +1,2 @@
+#!/bin/bash
+pandoc docs/cover.md docs/overview.md docs/setup.md docs/architecture_implementation.md docs/backend/reflection.md docs/backend/backend_overview.md docs/backend/auth_service.md docs/backend/task_service.md docs/backend/team_service.md docs/backend/realtime_service.md docs/backend/notification_service.md docs/backend/kafka.md docs/backend/nginx.md docs/backend/api_endpoints.md docs/branching.md -o project_documentation.pdf --toc --toc-depth=3 --resource-path=docs --pdf-engine=xelatex --css=documentation.css

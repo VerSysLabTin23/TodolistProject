@@ -91,5 +91,7 @@ All events follow a consistent JSON structure:
 
 ## Scalability
 - **Partitioning**: Events are partitioned by `teamId` to enable parallel processing across teams  
-- **Consumer Groups**: Multiple consumers within a group can share the processing load  
+- **Consumer Groups**: Multiple consumers within a group can share the processing load
+
+\newpage  
 - **Horizontal Scaling**: Kafka clusters can be scaled with multiple brokers for high availability and throughput  

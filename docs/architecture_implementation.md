@@ -29,9 +29,6 @@ Load Balancing: Implementing API gateway and load balancing through Nginx
 
 The original architecture was already microservices-based but used Redis for caching and direct service communication.
 
-#### Current Architecture with Kafka
-![Current Architecture](img/architecture_new.png)
-
 ### 1.3 System Components
 - Frontend: React 18 + TypeScript SPA with WebSocket client
 - API Gateway: Nginx reverse proxy with load balancing
@@ -110,4 +107,6 @@ Service Actions → Kafka Events → Multiple Consumers
 
 - Backend by Ziyi Hong: [backend_overview](backend/backend_overview.md)
 - Frontend by Danylo Tulainov: [frontend_overview](frontend/frontend_overview.md)
+
+\newpage
 

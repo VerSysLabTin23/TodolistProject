@@ -37,5 +37,7 @@ It handles load balancing, WebSocket proxying, static file serving, and request 
 - **Health Checks**: Integrated with Docker health checks  
 
 ## Key Files
-- **Configuration**: `nginx.conf`  
+- **Configuration**: `nginx.conf`
+
+\newpage  
 - **Docker Config**: `docker-compose.yml` (nginx service)  

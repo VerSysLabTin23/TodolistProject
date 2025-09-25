@@ -51,3 +51,5 @@ The backend consists of 5 microservices communicating through REST APIs and Kafk
 - **Team-based Partitioning**: Kafka events partitioned by team ID for ordering
 - **Horizontal Scaling**: Services designed for multiple instances
 - **JWT Authentication**: Stateless authentication across services
+
+\newpage

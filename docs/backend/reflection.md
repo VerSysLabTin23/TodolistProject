@@ -50,3 +50,5 @@
     - Database per Service: Each service owning its data provides better isolation but requires careful design of data access patterns
     - Event Sourcing: Storing events as the source of truth enables replay and audit capabilities
     - Schema Evolution: Managing data format changes across services requires versioning and backward compatibility strategies
+
+\newpage

@@ -35,4 +35,6 @@ The service publishes events to **Kafka** for real-time updates:
 - **Middleware**: `auth/internal/middleware/jwt.go`  
 - **Events**: `auth/internal/events/producer.go`  
 - **Migrations**: `auth/migrations/`  
-- **API Spec**: `auth/api/auth.yml`  
+- **API Spec**: `auth/api/auth.yml`
+
+\newpage  

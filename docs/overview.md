@@ -4,6 +4,10 @@
 
 **Team Members**: Ziyi Hong, Danylo Tulainov
 
+**GitHub Repository**: [https://github.com/VerSysLabTin23/TodolistProject](https://github.com/VerSysLabTin23/TodolistProject)  
+ All documentation is available in the `docs/` folder of the repository.
+
+
 ---
 
 ## Project Summary
@@ -72,3 +76,5 @@ This project implements a distributed, real-time collaborative Todo application 
 - **Backend Services**: [Backend Overview](backend/backend_overview.md)
 - **Project Reflection**: [Backend Reflection](backend/reflection.md)
 - **Development_related**: [Branching Strategy](branching.md)
+
+\newpage

@@ -37,4 +37,6 @@ The service publishes events to **Kafka** for real-time updates:
 - **Repository**: `team/internal/repository/repository.go`  
 - **Events**: `team/internal/events/events.go`  
 - **Migrations**: `team/migrations/`  
-- **API Spec**: `team/api/team.yml`  
+- **API Spec**: `team/api/team.yml`
+
+\newpage  
