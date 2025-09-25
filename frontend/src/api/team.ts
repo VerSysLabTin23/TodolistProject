@@ -97,3 +97,48 @@ export async function listTeamMembers(teamId: number): Promise<TeamMember[]> {
     const res = await authFetch(`${TEAM_API}/teams/${teamId}/members`);
     return res.json() as Promise<TeamMember[]>;
 }
+
+export type TeamPatch = {
+    name?: string;
+    description?: string;
+};
+
+/** ADMIN: list all teams (not just those of the current user) */
+export async function adminListAllTeams(): Promise<Team[]> {
+    const res = await authFetch(`${TEAM_API}/teams`);
+    return res.json() as Promise<Team[]>;
+}
+
+/** ADMIN: update team (name/description) */
+export async function adminUpdateTeam(teamId: number, patch: TeamPatch): Promise<Team> {
+    const res = await authFetch(`${TEAM_API}/teams/${teamId}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+    });
+    return res.json() as Promise<Team>;
+}
+
+/** ADMIN: add member with role */
+export async function adminAddMember(teamId: number, userId: number, role: TeamRole): Promise<TeamMember> {
+    const res = await authFetch(`${TEAM_API}/teams/${teamId}/members`, {
+        method: "POST",
+        body: JSON.stringify({ userId, role }),
+    });
+    return res.json() as Promise<TeamMember>;
+}
+
+/** ADMIN: remove member */
+export async function adminRemoveMember(teamId: number, userId: number): Promise<void> {
+    await authFetch(`${TEAM_API}/teams/${teamId}/members/${userId}`, {
+        method: "DELETE",
+    });
+}
+
+/** ADMIN: (optional) change member role */
+export async function adminSetMemberRole(teamId: number, userId: number, role: TeamRole): Promise<TeamMember> {
+    const res = await authFetch(`${TEAM_API}/teams/${teamId}/members/${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ role }),
+    });
+    return res.json() as Promise<TeamMember>;
+}

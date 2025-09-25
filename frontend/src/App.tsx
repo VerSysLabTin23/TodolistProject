@@ -13,6 +13,10 @@ import TeamsDetailedPage from "./pages/teams/TeamsDetailedPage";
 import NotFoundPage from "./pages/NotFound.tsx";
 import TaskDetailsPage from "./pages/tasks/DetailedTaskPage";
 import CreateTeamPage from "./pages/teams/CreateTeamPage";
+import RequireAdmin from "./routes/RequireAdmin.tsx";
+import UsersAdminPage from "./pages/admin/UsersAdminPage.tsx";
+import TeamsAdminPage from "./pages/admin/TeamsAdminPage.tsx";
+import TeamAdminDetailPage from "./pages/admin/TeamAdminDetailPage.tsx";
 
 export default function App() {
     return (
@@ -35,6 +39,13 @@ export default function App() {
                         <Route path="/tasks/:id" element={<TaskDetailsPage />} />
                         <Route path="*" element={<NotFoundPage />} />
                     </Route>
+                </Route>
+
+                {/* ADMIN */}
+                <Route element={<RequireAdmin />}>
+                    <Route path="/admin/users" element={<UsersAdminPage />} />
+                    <Route path="/admin/teams" element={<TeamsAdminPage />} />
+                    <Route path="/admin/teams/:id" element={<TeamAdminDetailPage />} />
                 </Route>
             </Routes>
         </BrowserRouter>
