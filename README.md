@@ -26,7 +26,7 @@ Find all the documentation in docs/
 - [frontend](docs/frontend/frontend_overview.md) - Frontend related documentation
 
 ---
-## 4. Quick Start:
+## Quick Start:
 
 ### Starting Services
 ```bash
