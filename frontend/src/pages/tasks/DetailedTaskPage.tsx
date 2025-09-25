@@ -1,11 +1,44 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-    getTask, updateTask, deleteTask, setAssignee, setCompleted, type Task,
+    getTask,
+    updateTask,
+    deleteTask,
+    setAssignee,
+    setCompleted,
+    type Task,
 } from "../../api/task";
 import { useRealtime } from "../../realtime/useRealtime";
 import type { TaskEvent } from "../../realtime/ws";
-import {patchFromEventPayload} from "../../realtime/eventPatch.ts";
+import { patchFromEventPayload } from "../../realtime/eventPatch";
+
+type Draft = {
+    title: string;
+    description: string;
+    priority: Task["priority"];
+    due: string;
+    assigneeId: number | "" | undefined; // "" for UI empty state
+};
+
+function toDraft(t: Task): Draft {
+    return {
+        title: t.title,
+        description: t.description ?? "",
+        priority: t.priority,
+        due: t.due ?? "",
+        assigneeId: t.assigneeId ?? "",
+    };
+}
+
+function fromDraft(d: Draft): Partial<Task> {
+    return {
+        title: d.title.trim(),
+        description: d.description.trim() || undefined,
+        priority: d.priority || undefined,
+        due: d.due || undefined,
+        assigneeId: d.assigneeId === "" ? undefined : d.assigneeId,
+    };
+}
 
 export default function TaskDetailsPage() {
     const { id } = useParams<{ id: string }>();
@@ -13,32 +46,52 @@ export default function TaskDetailsPage() {
     const navigate = useNavigate();
 
     const [task, setTask] = useState<Task | null>(null);
+    const [draft, setDraft] = useState<Draft | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [err, setErr] = useState<string | null>(null);
-    // const { status: wsStatus, setStatus: setWsStatus } = useWsStatus();
 
+    // track if user is actively editing; while dirty, we won't overwrite the form with WS patches
+    const isDirty = useMemo(() => {
+        if (!task || !draft) return false;
+        const now = fromDraft(draft);
+        return (
+            now.title !== task.title ||
+            (now.description ?? "") !== (task.description ?? "") ||
+            (now.priority ?? "") !== (task.priority ?? "") ||
+            (now.due ?? "") !== (task.due ?? "") ||
+            (now.assigneeId ?? "") !== (task.assigneeId ?? "")
+        );
+    }, [task, draft]);
+
+    // initial load
     useEffect(() => {
         let canceled = false;
         async function load() {
+            if (!Number.isFinite(taskId)) {
+                setErr("Invalid task id");
+                setLoading(false);
+                return;
+            }
             try {
                 const t = await getTask(taskId);
-                if (!canceled) setTask(t);
+                if (!canceled) {
+                    setTask(t);
+                    setDraft(toDraft(t));
+                }
             } catch {
                 if (!canceled) setErr("Failed to load task");
             } finally {
                 if (!canceled) setLoading(false);
             }
         }
-        if (!Number.isFinite(taskId)) {
-            setErr("Invalid task id");
-            setLoading(false);
-            return;
-        }
         load();
-        return () => { canceled = true; };
+        return () => {
+            canceled = true;
+        };
     }, [taskId]);
 
+    // realtime merge: if user is editing (dirty), keep their draft; otherwise apply patch
     useRealtime((evt: TaskEvent) => {
         if (!Number.isFinite(taskId) || evt.taskId !== taskId) return;
 
@@ -48,21 +101,32 @@ export default function TaskDetailsPage() {
         }
 
         const patch = patchFromEventPayload(evt);
-        setTask(prev => (prev ? ({ ...prev, ...patch }) : prev));
-    });
+        setTask((prev) => {
+            if (!prev) return prev;
+            const merged: Task = { ...prev, ...patch };
+            // only refresh the draft if user is not editing
+            if (!isDirty) setDraft(toDraft(merged));
+            return merged;
+        });
+    }, { throttleMs: 120 });
 
-
-    async function save(changes: Partial<Task>) {
-        if (!task) return;
+    async function saveAll() {
+        if (!task || !draft) return;
         setSaving(true);
         try {
-            const updated = await updateTask(task.id, changes);
+            const payload = fromDraft(draft);
+            const updated = await updateTask(task.id, payload);
             setTask(updated);
+            setDraft(toDraft(updated)); // reset dirty state
         } catch {
             alert("Save failed");
         } finally {
             setSaving(false);
         }
+    }
+
+    function cancelEdits() {
+        if (task) setDraft(toDraft(task));
     }
 
     async function onDelete() {
@@ -76,9 +140,32 @@ export default function TaskDetailsPage() {
         }
     }
 
+    async function toggleComplete() {
+        if (!task) return;
+        try {
+            const updated = await setCompleted(task.id, !task.completed);
+            setTask(updated);
+            if (!isDirty) setDraft(toDraft(updated));
+        } catch {
+            alert("Complete toggle failed");
+        }
+    }
+
+    async function commitAssignee() {
+        if (!task || !draft) return;
+        const v = draft.assigneeId === "" ? null : Number(draft.assigneeId);
+        try {
+            const updated = await setAssignee(task.id, v);
+            setTask(updated);
+            if (!isDirty) setDraft(toDraft(updated));
+        } catch {
+            alert("Setting assignee failed");
+        }
+    }
+
     if (loading) return <div>Loading…</div>;
     if (err) return <div style={{ color: "crimson" }}>{err}</div>;
-    if (!task) return <div>Not found</div>;
+    if (!task || !draft) return <div>Not found</div>;
 
     return (
         <section style={{ maxWidth: 720, margin: "0 auto" }}>
@@ -88,9 +175,8 @@ export default function TaskDetailsPage() {
                 <label>
                     Title
                     <input
-                        value={task.title}
-                        onChange={(e) => setTask({ ...task, title: e.target.value })}
-                        onBlur={() => save({ title: task.title })}
+                        value={draft.title}
+                        onChange={(e) => setDraft({ ...draft, title: e.target.value })}
                         style={{ width: "100%", padding: 8 }}
                     />
                 </label>
@@ -98,24 +184,24 @@ export default function TaskDetailsPage() {
                 <label>
                     Description
                     <textarea
-                        value={task.description ?? ""}
-                        onChange={(e) => setTask({ ...task, description: e.target.value })}
-                        onBlur={() => save({ description: task.description ?? "" })}
+                        value={draft.description}
+                        onChange={(e) => setDraft({ ...draft, description: e.target.value })}
                         rows={4}
                         style={{ width: "100%", padding: 8 }}
                     />
                 </label>
 
-                <div style={{ display: "flex", gap: 12 }}>
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                     <label>
                         Priority
                         <select
-                            value={task.priority ?? ""}
-                            onChange={(e) => {
-                                const p = (e.target.value || undefined) as Task["priority"];
-                                setTask({ ...task, priority: p });
-                                save({ priority: p });
-                            }}
+                            value={draft.priority ?? ""}
+                            onChange={(e) =>
+                                setDraft({
+                                    ...draft,
+                                    priority: (e.target.value || undefined) as Task["priority"],
+                                })
+                            }
                         >
                             <option value="">—</option>
                             <option value="low">low</option>
@@ -128,12 +214,8 @@ export default function TaskDetailsPage() {
                         Due
                         <input
                             type="date"
-                            value={task.due ?? ""}
-                            onChange={(e) => {
-                                const v = e.target.value || undefined;
-                                setTask({ ...task, due: v });
-                                save({ due: v as string | undefined });
-                            }}
+                            value={draft.due}
+                            onChange={(e) => setDraft({ ...draft, due: e.target.value })}
                         />
                     </label>
 
@@ -141,50 +223,52 @@ export default function TaskDetailsPage() {
                         Assignee (userId)
                         <input
                             type="number"
-                            value={task.assigneeId ?? ""}
-                            onChange={(e) => {
-                                const v = e.target.value === "" ? undefined : Number(e.target.value);
-                                setTask({ ...task, assigneeId: v });
-                            }}
-                            onBlur={async (e) => {
-                                const v = e.currentTarget.value === "" ? null : Number(e.currentTarget.value);
-                                try {
-                                    const updated = await setAssignee(task.id, v);
-                                    setTask(updated);
-                                } catch {
-                                    alert("Setting assignee failed");
-                                }
-                            }}
+                            value={draft.assigneeId === undefined ? "" : draft.assigneeId}
+                            onChange={(e) =>
+                                setDraft({
+                                    ...draft,
+                                    assigneeId:
+                                        e.target.value === "" ? "" : Number(e.target.value),
+                                })
+                            }
+                            onBlur={commitAssignee}
                             style={{ width: 120 }}
                         />
                     </label>
                 </div>
 
                 <div style={{ display: "flex", gap: 12 }}>
-                    <button
-                        disabled={saving}
-                        onClick={async () => {
-                            try {
-                                const updated = await setCompleted(task.id, !task.completed);
-                                setTask(updated);
-                            } catch {
-                                alert("Complete toggle failed");
-                            }
-                        }}
-                    >
+                    <button onClick={toggleComplete}>
                         {task.completed ? "Mark as not completed" : "Mark as completed"}
                     </button>
 
-                    <button onClick={onDelete} style={{ color: "crimson" }}>
+                    <button
+                        onClick={saveAll}
+                        disabled={saving || !isDirty}
+                        style={{ fontWeight: 600 }}
+                        title={!isDirty ? "No changes to save" : undefined}
+                    >
+                        {saving ? "Saving…" : "Save"}
+                    </button>
+
+                    <button
+                        onClick={cancelEdits}
+                        disabled={!isDirty || saving}
+                        title={!isDirty ? "Nothing to cancel" : undefined}
+                    >
+                        Cancel
+                    </button>
+
+                    <button onClick={onDelete} style={{ color: "crimson", marginLeft: "auto" }}>
                         Delete
                     </button>
                 </div>
 
                 <div style={{ fontSize: 12, color: "#6b7280" }}>
-                    Team #{task.teamId} • created {task.createdAt || "—"} • updated {task.updatedAt || "—"}
+                    Team #{task.teamId} • created {task.createdAt || "—"} • updated{" "}
+                    {task.updatedAt || "—"}
                 </div>
             </div>
         </section>
     );
 }
-
