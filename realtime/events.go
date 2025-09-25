@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"fmt"
 	"time"
 )
 
@@ -81,32 +83,21 @@ func CreateUnifiedEvent(eventType string, teamID, actorID int, data interface{})
 }
 
 // generateEventID generates a unique event ID
+// generateEventID returns a UUIDv4 string without external dependencies
 func generateEventID() string {
-	// Simple timestamp-based ID for now
-	// In production, consider using UUID
-	return time.Now().Format("20060102150405") + "-" + itoa(int(time.Now().UnixNano()%10000))
-}
-
-// small itoa to avoid fmt import
-func itoa(i int) string {
-	if i == 0 {
-		return "0"
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// Fallback to timestamp when RNG fails (very unlikely)
+		return time.Now().UTC().Format("20060102T150405.000000000Z07:00")
 	}
-	neg := false
-	if i < 0 {
-		neg = true
-		i = -i
-	}
-	var buf [20]byte
-	pos := len(buf)
-	for i > 0 {
-		pos--
-		buf[pos] = byte('0' + i%10)
-		i /= 10
-	}
-	if neg {
-		pos--
-		buf[pos] = '-'
-	}
-	return string(buf[pos:])
+	// Set version (4) and variant (RFC 4122)
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		uint32(b[0])<<24|uint32(b[1])<<16|uint32(b[2])<<8|uint32(b[3]),
+		uint16(b[4])<<8|uint16(b[5]),
+		uint16(b[6])<<8|uint16(b[7]),
+		uint16(b[8])<<8|uint16(b[9]),
+		uint64(b[10])<<40|uint64(b[11])<<32|uint64(b[12])<<24|uint64(b[13])<<16|uint64(b[14])<<8|uint64(b[15]),
+	)
 }

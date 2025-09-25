@@ -46,7 +46,7 @@ type KafkaConsumer struct {
 func NewKafkaConsumer(hub *Hub) *KafkaConsumer {
 	teamAPIURL := os.Getenv("TEAM_API_URL")
 	if teamAPIURL == "" {
-		teamAPIURL = "http://team_service:8083"
+		teamAPIURL = "http://team-service:8083"
 	}
 
 	return &KafkaConsumer{
@@ -68,6 +68,18 @@ func NewKafkaConsumer(hub *Hub) *KafkaConsumer {
 	}
 }
 
+// a unique GID for each instance and pass it to the consumer for each topic.
+func instanceGroupID() string {
+	gid := os.Getenv("READER_GROUP_ID_SUFFIX")
+	if gid != "" {
+		return "realtime-" + gid
+	}
+	if hn, err := os.Hostname(); err == nil && hn != "" {
+		return "realtime-" + hn
+	}
+	return fmt.Sprintf("realtime-%d", time.Now().UnixNano())
+}
+
 // Start begins consuming events from Kafka
 func (kc *KafkaConsumer) Start(ctx context.Context) {
 	brokers := os.Getenv("KAFKA_BROKERS")
@@ -75,29 +87,35 @@ func (kc *KafkaConsumer) Start(ctx context.Context) {
 		brokers = "dev_kafka:9092"
 	}
 
-	log.Printf("Starting Kafka consumer with brokers: %s, topics: %v", brokers, kc.topics)
+	gid := instanceGroupID()
+	log.Printf("Starting Kafka consumer with brokers: %s, topics: %v, group=%s", brokers, kc.topics, gid)
 
 	// Create a reader for each topic
 	for _, topic := range kc.topics {
-		go kc.consumeTopic(ctx, brokers, topic)
+		go kc.consumeTopic(ctx, brokers, topic, gid)
 	}
 }
 
 // consumeTopic consumes events from a specific Kafka topic
-func (kc *KafkaConsumer) consumeTopic(ctx context.Context, brokers, topic string) {
+func (kc *KafkaConsumer) consumeTopic(ctx context.Context, brokers, topic, groupID string) {
 	r := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:  []string{brokers},
 		Topic:    topic,
-		GroupID:  "realtime-service",
-		MinBytes: 10e3, // 10KB
-		MaxBytes: 10e6, // 10MB
+		GroupID:  groupID, // gid unique
+		MinBytes: 10e3,
+		MaxBytes: 10e6,
 		MaxWait:  1 * time.Second,
-		// Partition assignment strategy ensures proper load balancing
-		// Events are partitioned by team ID, so related events stay together
 	})
 	defer r.Close()
 
-	log.Printf("Starting consumer for topic: %s", topic)
+	dlqWriter := &kafka.Writer{
+		Addr:         kafka.TCP(brokers),
+		RequiredAcks: kafka.RequireOne,
+		Async:        false,
+	}
+	defer dlqWriter.Close()
+
+	log.Printf("Starting consumer for topic: %s (group=%s)", topic, groupID)
 
 	for {
 		select {
@@ -114,16 +132,21 @@ func (kc *KafkaConsumer) consumeTopic(ctx context.Context, brokers, topic string
 				continue
 			}
 
-			log.Printf("[kafka] %s key=%s value=%s", topic, string(m.Key), string(m.Value))
+			log.Printf("[kafka] topic=%s key=%s value_len=%d", topic, string(m.Key), len(m.Value))
 
-			// Parse the event
 			var event KafkaEvent
 			if err := json.Unmarshal(m.Value, &event); err != nil {
 				log.Printf("Failed to parse event from topic %s: %v", topic, err)
+				_ = dlqWriter.WriteMessages(ctx, kafka.Message{
+					Topic:   topic + ".deadletter",
+					Key:     m.Key,
+					Value:   m.Value,
+					Time:    time.Now(),
+					Headers: append(m.Headers, kafka.Header{Key: "error", Value: []byte("json_unmarshal_failed")}),
+				})
 				continue
 			}
 
-			// Convert to unified event and broadcast to relevant users
 			unifiedEvent := kc.convertToUnifiedEvent(event)
 			if unifiedEvent != nil {
 				targetUsers := kc.resolveTargetUsers(event)
@@ -146,36 +169,36 @@ func (kc *KafkaConsumer) resolveTargetUsers(event KafkaEvent) []int {
 		// Task events: notify team members + assignee + creator
 		if event.TeamID > 0 {
 			teamMembers := kc.getTeamMembers(event.TeamID)
-			log.Printf("👥 Found %d team members for team %d", len(teamMembers), event.TeamID)
+			log.Printf("Found %d team members for team %d", len(teamMembers), event.TeamID)
 			for _, member := range teamMembers {
 				targetUsers = append(targetUsers, member.UserID)
-				log.Printf("➕ Adding team member: UserID=%d", member.UserID)
+				log.Printf("Adding team member: UserID=%d", member.UserID)
 			}
 		}
 
-		// Also notify assignee and creator specifically
+		// Notify assignee and creator specifically
 		if event.AssigneeID != nil && *event.AssigneeID > 0 {
 			targetUsers = append(targetUsers, *event.AssigneeID)
-			log.Printf("➕ Adding assignee: UserID=%d", *event.AssigneeID)
+			log.Printf("Adding assignee: UserID=%d", *event.AssigneeID)
 		}
 		if event.CreatorID > 0 {
 			targetUsers = append(targetUsers, event.CreatorID)
-			log.Printf("➕ Adding creator: UserID=%d", event.CreatorID)
+			log.Printf("Adding creator: UserID=%d", event.CreatorID)
 		}
 
 	case "team.created", "team.updated", "team.deleted":
 		// Team events: notify team members + owner
 		if event.TeamID > 0 {
 			teamMembers := kc.getTeamMembers(event.TeamID)
-			log.Printf("👥 Found %d team members for team %d", len(teamMembers), event.TeamID)
+			log.Printf("Found %d team members for team %d", len(teamMembers), event.TeamID)
 			for _, member := range teamMembers {
 				targetUsers = append(targetUsers, member.UserID)
-				log.Printf("➕ Adding team member: UserID=%d", member.UserID)
+				log.Printf("Adding team member: UserID=%d", member.UserID)
 			}
 		}
 		if event.OwnerID > 0 {
 			targetUsers = append(targetUsers, event.OwnerID)
-			log.Printf("➕ Adding owner: UserID=%d", event.OwnerID)
+			log.Printf("Adding owner: UserID=%d", event.OwnerID)
 		}
 
 	case "team.member_added", "team.member_removed", "team.member_role_updated":
@@ -199,7 +222,7 @@ func (kc *KafkaConsumer) resolveTargetUsers(event KafkaEvent) []int {
 
 	// Remove duplicates
 	result := removeDuplicateInts(targetUsers)
-	log.Printf("🎯 Final target users after deduplication: %v", result)
+	log.Printf("Final target users after deduplication: %v", result)
 	return result
 }
 
@@ -207,32 +230,48 @@ func (kc *KafkaConsumer) resolveTargetUsers(event KafkaEvent) []int {
 func (kc *KafkaConsumer) getTeamMembers(teamID int) []TeamMember {
 	url := fmt.Sprintf("%s/internal/teams/%d/members", kc.teamAPIURL, teamID)
 
-	log.Printf("🔍 Fetching team members from: %s", url)
+	log.Printf("Fetching team members from: %s", url)
 
-	resp, err := http.Get(url)
+	client := &http.Client{Timeout: 2 * time.Second}
+	var resp *http.Response
+	var err error
+	for attempt := 1; attempt <= 2; attempt++ {
+		req, rerr := http.NewRequest(http.MethodGet, url, nil)
+		if rerr != nil {
+			err = rerr
+			break
+		}
+		if tok := os.Getenv("INTERNAL_TOKEN"); tok != "" {
+			req.Header.Set("X-Internal-Token", tok)
+		}
+		resp, err = client.Do(req)
+		if err == nil {
+			break
+		}
+		log.Printf("Attempt %d failed to get team members for team %d: %v", attempt, teamID, err)
+		time.Sleep(100 * time.Millisecond)
+	}
 	if err != nil {
-		log.Printf("❌ Failed to get team members for team %d: %v", teamID, err)
 		return []TeamMember{}
 	}
 	defer resp.Body.Close()
 
-	log.Printf("📡 Team service response status: %d for team %d", resp.StatusCode, teamID)
+	log.Printf("Team service response status: %d for team %d", resp.StatusCode, teamID)
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("⚠️ Team service returned status %d for team %d", resp.StatusCode, teamID)
-		// 读取响应body以便调试
+		log.Printf("Team service returned status %d for team %d", resp.StatusCode, teamID)
 		body, _ := io.ReadAll(resp.Body)
-		log.Printf("📄 Response body: %s", string(body))
+		log.Printf("Response body: %s", string(body))
 		return []TeamMember{}
 	}
 
 	var members []TeamMember
 	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
-		log.Printf("❌ Failed to decode team members response for team %d: %v", teamID, err)
+		log.Printf("Failed to decode team members response for team %d: %v", teamID, err)
 		return []TeamMember{}
 	}
 
-	log.Printf("✅ Successfully retrieved %d members for team %d: %+v", len(members), teamID, members)
+	log.Printf("Successfully retrieved %d members for team %d", len(members), teamID)
 	return members
 }
 

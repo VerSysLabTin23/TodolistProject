@@ -1,9 +1,12 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
-	"strconv"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,9 +19,23 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		// Allow all origins for development
-		// In production, implement proper origin checking
-		return true
+		allowed := strings.TrimSpace(os.Getenv("ALLOWED_WS_ORIGINS"))
+		if allowed == "*" {
+			return true
+		}
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return allowed == ""
+		}
+		if allowed == "" {
+			return false
+		}
+		for _, o := range strings.Split(allowed, ",") {
+			if strings.TrimSpace(o) == origin {
+				return true
+			}
+		}
+		return false
 	},
 }
 
@@ -132,24 +149,32 @@ func (h *Hub) BroadcastToTeam(event UnifiedEvent) {
 
 // HandleWebSocket handles WebSocket connection upgrade and management
 func (h *Hub) HandleWebSocket(c *gin.Context) {
-	// Get user ID from query parameter (in production, extract from JWT)
-	userIDStr := c.Query("userId")
-	if userIDStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "userId parameter required"})
-		return
-	}
-
-	userID, err := strconv.Atoi(userIDStr)
+	// Authenticate via JWT using auth-service /validate
+	userID, err := validateAndExtractUserID(c.Request)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid userId"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
 
-	// TODO: Validate JWT token
-	// For now, we'll assume the user is authorized
+	// Echo back Sec-WebSocket-Protocol (first value) if client sent one
+	if sp := c.Request.Header.Get("Sec-WebSocket-Protocol"); sp != "" {
+		if idx := strings.Index(sp, ","); idx >= 0 {
+			sp = strings.TrimSpace(sp[:idx])
+		}
+		c.Writer.Header().Set("Sec-WebSocket-Protocol", sp)
+	}
+
+	// Prepare upgrader with negotiated subprotocol (if any)
+	localUpgrader := upgrader
+	if sp := c.Request.Header.Get("Sec-WebSocket-Protocol"); sp != "" {
+		if idx := strings.Index(sp, ","); idx >= 0 {
+			sp = strings.TrimSpace(sp[:idx])
+		}
+		localUpgrader.Subprotocols = []string{sp}
+	}
 
 	// Upgrade HTTP connection to WebSocket
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := localUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("WebSocket upgrade error: %v", err)
 		return
@@ -179,6 +204,7 @@ func (c *Client) readPump() {
 	}()
 
 	// Set read deadline and pong handler for keepalive
+	c.conn.SetReadLimit(1 << 20) // 1MB per message
 	c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 	c.conn.SetPongHandler(func(string) error {
 		c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -186,12 +212,17 @@ func (c *Client) readPump() {
 	})
 
 	for {
-		// Read message from client (for now, we just ignore client messages)
-		_, _, err := c.conn.ReadMessage()
+		// Enforce server-push-only: close on inbound data frames
+		mt, _, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("WebSocket error: %v", err)
 			}
+			break
+		}
+		if mt == websocket.TextMessage || mt == websocket.BinaryMessage {
+			log.Printf("Closing connection due to unexpected inbound message from user %d", c.userID)
+			_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 			break
 		}
 	}
@@ -227,4 +258,88 @@ func (c *Client) writePump() {
 			}
 		}
 	}
+}
+
+// validateAndExtractUserID validates bearer token via auth-service and returns user id
+func validateAndExtractUserID(r *http.Request) (int, error) {
+	authz := r.Header.Get("Authorization")
+	if authz == "" {
+		// Always allow Sec-WebSocket-Protocol 'Bearer <token>' for browsers in production
+		sp := r.Header.Get("Sec-WebSocket-Protocol")
+		if sp != "" {
+			parts := strings.Split(sp, ",")
+			for _, p := range parts {
+				p = strings.TrimSpace(p)
+				if strings.HasPrefix(strings.ToLower(p), "bearer ") {
+					authz = p
+					break
+				}
+				// If it looks like a JWT (three segments), accept as token
+				if cnt := strings.Count(p, "."); cnt == 2 {
+					authz = "Bearer " + p
+					break
+				}
+			}
+		}
+		// Optionally allow query token only when explicitly enabled
+		if authz == "" && strings.EqualFold(os.Getenv("WS_ALLOW_QUERY_TOKEN"), "true") {
+			if q := r.URL.Query().Get("token"); q != "" {
+				authz = "Bearer " + q
+			}
+		}
+		// Simplest fallback: allow userId from query when enabled (no auth roundtrip)
+		if authz == "" && strings.EqualFold(os.Getenv("WS_ALLOW_USERID_QUERY"), "true") {
+			if uid := r.URL.Query().Get("userId"); uid != "" {
+				// parse and return directly
+				var id int
+				// tiny atoi without importing strconv
+				for i := 0; i < len(uid); i++ {
+					ch := uid[i]
+					if ch < '0' || ch > '9' {
+						return 0, fmt.Errorf("invalid userId")
+					}
+					id = id*10 + int(ch-'0')
+				}
+				if id <= 0 {
+					return 0, fmt.Errorf("invalid userId")
+				}
+				return id, nil
+			}
+		}
+	}
+	if authz == "" {
+		return 0, fmt.Errorf("missing Authorization header")
+	}
+	baseURL := os.Getenv("AUTH_SERVICE_URL")
+	if baseURL == "" {
+		baseURL = "http://auth-service:8084"
+	}
+	req, err := http.NewRequest(http.MethodPost, baseURL+"/validate", nil)
+	if err != nil {
+		return 0, err
+	}
+	req.Header = make(http.Header)
+	req.Header.Set("Authorization", authz)
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("invalid token (status %d)", resp.StatusCode)
+	}
+	var vr struct {
+		Valid bool `json:"valid"`
+		User  struct {
+			ID int `json:"id"`
+		} `json:"user"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&vr); err != nil {
+		return 0, err
+	}
+	if !vr.Valid || vr.User.ID == 0 {
+		return 0, fmt.Errorf("token not valid")
+	}
+	return vr.User.ID, nil
 }

@@ -3,9 +3,9 @@ module github.com/VerSysLabTin23/TodolistProject
 go 1.24.2
 
 require (
-	github.com/gin-gonic/gin v1.10.1
-	github.com/gorilla/websocket v1.5.3
-	github.com/segmentio/kafka-go v0.4.47
+    github.com/gin-gonic/gin v1.10.1
+    github.com/gorilla/websocket v1.5.3
+    github.com/segmentio/kafka-go v0.4.47
 )
 
 require (

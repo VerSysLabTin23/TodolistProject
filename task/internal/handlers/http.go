@@ -153,6 +153,16 @@ func (h *TaskHandlers) CreateTaskInTeam(c *gin.Context) {
 		return
 	}
 
+	// Idempotency: optional Idempotency-Key header
+	var requestID *string
+	if rid := c.GetHeader("Idempotency-Key"); rid != "" {
+		requestID = &rid
+		if existing, err := h.repo.GetByRequestID(rid); err == nil && existing != nil {
+			c.JSON(http.StatusOK, models.MapTask(*existing))
+			return
+		}
+	}
+
 	t := &models.Task{
 		TeamID:      teamID,
 		CreatorID:   creatorID,
@@ -162,6 +172,7 @@ func (h *TaskHandlers) CreateTaskInTeam(c *gin.Context) {
 		Completed:   false,
 		Priority:    models.Priority(req.Priority),
 		Due:         due,
+		RequestID:   requestID,
 	}
 
 	if err := h.repo.Create(t); err != nil {
@@ -171,7 +182,7 @@ func (h *TaskHandlers) CreateTaskInTeam(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, models.MapTask(*t))
 
-	// Emit task.created event (best-effort)
+	// Emit task.created event
 	if h.producer != nil {
 		_ = h.producer.TaskCreated(context.Background(), t.ID, t.TeamID, creatorID, t.CreatorID, t.AssigneeID, map[string]any{
 			"title":       t.Title,
@@ -352,9 +363,42 @@ func (h *TaskHandlers) UpdateTask(c *gin.Context) {
 		t.AssigneeID = req.AssigneeID
 	}
 
-	if err := h.repo.Update(t); err != nil {
-		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", err.Error()))
-		return
+	// Optimistic concurrency: If-Match or X-Resource-Version header
+	// If provided, attempt version-matched update; else fall back to simple update
+	ifMatch := c.GetHeader("If-Match")
+	if ifMatch == "" {
+		ifMatch = c.GetHeader("X-Resource-Version")
+	}
+	if ifMatch != "" {
+		// tiny atoi without importing strconv
+		ver := 0
+		for i := 0; i < len(ifMatch); i++ {
+			ch := ifMatch[i]
+			if ch < '0' || ch > '9' {
+				ver = 0
+				break
+			}
+			ver = ver*10 + int(ch-'0')
+		}
+		if ver <= 0 {
+			ver = t.Version
+		}
+		ok, err := h.repo.UpdateIfVersionMatches(t, ver)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", err.Error()))
+			return
+		}
+		if !ok {
+			c.JSON(http.StatusConflict, errResp("CONFLICT", "resource was updated by another request"))
+			return
+		}
+		t.Version = ver + 1
+	} else {
+		if err := h.repo.Update(t); err != nil {
+			c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", err.Error()))
+			return
+		}
+		// Version is incremented by DB trigger in UpdateIfVersionMatches path only; keep as-is here
 	}
 
 	c.JSON(http.StatusOK, models.MapTask(*t))
@@ -366,7 +410,7 @@ func (h *TaskHandlers) UpdateTask(c *gin.Context) {
 			"completed":   t.Completed,
 			"priority":    string(t.Priority),
 			"description": t.Description,
-			"due":         t.Due,
+			"due":         t.Due.Format("2006-01-02"), // Format as YYYY-MM-DD string
 			"assigneeId":  t.AssigneeID,
 		})
 	}
@@ -412,8 +456,18 @@ func (h *TaskHandlers) DeleteTask(c *gin.Context) {
 		return
 	}
 
-	// TODO: Add additional permission check - only team owner and admin can delete tasks
-	// For now, all team members can delete tasks
+	// Permission: only creator, team admin, or owner can delete
+	if userID != t.CreatorID {
+		role, err := h.teamClient.GetUserRoleInTeam(userID, t.TeamID, token)
+		if err != nil {
+			c.JSON(http.StatusForbidden, errResp("FORBIDDEN", "insufficient permissions to delete task"))
+			return
+		}
+		if role != "owner" && role != "admin" {
+			c.JSON(http.StatusForbidden, errResp("FORBIDDEN", "only owner/admin/creator can delete task"))
+			return
+		}
+	}
 
 	if err := h.repo.Delete(id); err != nil {
 		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", err.Error()))
