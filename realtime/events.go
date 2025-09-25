@@ -101,6 +101,3 @@ func generateEventID() string {
 		uint64(b[10])<<40|uint64(b[11])<<32|uint64(b[12])<<24|uint64(b[13])<<16|uint64(b[14])<<8|uint64(b[15]),
 	)
 }
-
-// small itoa to avoid fmt import
-// removed custom itoa; using UUIDs for event IDs

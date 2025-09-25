@@ -5,8 +5,8 @@ services:
     image: mysql:8.0
     container_name: task_mysql
     environment:
-      MYSQL_ROOT_PASSWORD: pass
-      MYSQL_DATABASE: tasksdb
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${TASK_DB}
     ports:
       - "3306:3306"
     healthcheck:
@@ -20,8 +20,8 @@ services:
     image: mysql:8.0
     container_name: team_mysql
     environment:
-      MYSQL_ROOT_PASSWORD: pass
-      MYSQL_DATABASE: teamsdb
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${TEAM_DB}
     ports:
       - "3307:3306"
     healthcheck:
@@ -39,7 +39,7 @@ services:
       team-db:
         condition: service_healthy
     environment:
-      DATABASE_URL: "mysql://root:pass@team-db:3306/teamsdb?parseTime=true&loc=UTC&charset=utf8mb4"
+      DATABASE_URL: "mysql://root:${MYSQL_ROOT_PASSWORD}@team-db:3306/${TEAM_DB}?parseTime=true&loc=UTC&charset=utf8mb4"
     volumes:
       - ./team/migrations:/db/migrations:ro
     command: ["--wait", "up"]
@@ -61,14 +61,14 @@ services:
         condition: service_healthy
     environment:
       PORT: "8083"
-      DB_HOST: "team-db"
+      DB_HOST: team-db
       DB_PORT: "3306"
-      DB_USER: "root"
-      DB_PASS: "pass"
-      DB_NAME: "teamsdb"
-      AUTH_SERVICE_URL: "http://auth-service:8084"
-      KAFKA_BROKERS: "dev_kafka:9092"
-      INTERNAL_TOKEN: "dev-internal-token"
+      DB_USER: root
+      DB_PASS: ${MYSQL_ROOT_PASSWORD}
+      DB_NAME: ${TEAM_DB}
+      AUTH_SERVICE_URL: http://auth-service:8084
+      KAFKA_BROKERS: ${KAFKA_BROKERS}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
     ports:
       - "8083:8083"
     networks: [app-net]
@@ -83,7 +83,7 @@ services:
       team-service:
         condition: service_started
     environment:
-      DATABASE_URL: "mysql://root:pass@task-db:3306/tasksdb?parseTime=true&loc=UTC&charset=utf8mb4"
+      DATABASE_URL: "mysql://root:${MYSQL_ROOT_PASSWORD}@task-db:3306/${TASK_DB}?parseTime=true&loc=UTC&charset=utf8mb4"
     volumes:
       - ./task/migrations:/db/migrations:ro
     command: ["--wait", "up"]
@@ -109,14 +109,14 @@ services:
         condition: service_completed_successfully
     environment:
       PORT: "8081"
-      DB_HOST: "task-db"
+      DB_HOST: task-db
       DB_PORT: "3306"
-      DB_USER: "root"
-      DB_PASS: "pass"
-      DB_NAME: "tasksdb"
-      TEAM_SERVICE_URL: "http://team-service:8083"
-      AUTH_SERVICE_URL: "http://auth-service:8084"
-      KAFKA_BROKERS: "dev_kafka:9092"
+      DB_USER: root
+      DB_PASS: ${MYSQL_ROOT_PASSWORD}
+      DB_NAME: ${TASK_DB}
+      TEAM_SERVICE_URL: http://team-service:8083
+      AUTH_SERVICE_URL: http://auth-service:8084
+      KAFKA_BROKERS: ${KAFKA_BROKERS}
     ports:
       - "8081:8081"
     networks: [app-net]
@@ -159,8 +159,8 @@ services:
     image: mysql:8.0
     container_name: auth_mysql
     environment:
-      MYSQL_ROOT_PASSWORD: pass
-      MYSQL_DATABASE: authdb
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${AUTH_DB}
     ports:
       - "3309:3306"
     healthcheck:
@@ -177,7 +177,7 @@ services:
       auth-db:
         condition: service_healthy
     environment:
-      DATABASE_URL: "mysql://root:pass@auth-db:3306/authdb?parseTime=true&loc=UTC&charset=utf8mb4"
+      DATABASE_URL: "mysql://root:${MYSQL_ROOT_PASSWORD}@auth-db:3306/${AUTH_DB}?parseTime=true&loc=UTC&charset=utf8mb4"
     volumes:
       - ./auth/migrations:/db/migrations:ro
     command: ["--wait", "up"]
@@ -198,15 +198,15 @@ services:
         condition: service_healthy
     environment:
       PORT: "8084"
-      DB_HOST: "auth-db"
+      DB_HOST: auth-db
       DB_PORT: "3306"
-      DB_USER: "root"
-      DB_PASS: "pass"
-      DB_NAME: "authdb"
-      JWT_SECRET: "your-secret-key-change-in-production"
-      JWT_ACCESS_TTL: "15m"
-      JWT_REFRESH_TTL: "168h"
-      KAFKA_BROKERS: "dev_kafka:9092"
+      DB_USER: root
+      DB_PASS: ${MYSQL_ROOT_PASSWORD}
+      DB_NAME: ${AUTH_DB}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL}
+      KAFKA_BROKERS: ${KAFKA_BROKERS}
     ports:
       - "8084:8084"
     networks: [app-net]
@@ -236,35 +236,36 @@ services:
       kafka:
         condition: service_healthy
     environment:
-      KAFKA_BROKERS: "dev_kafka:9092"
+      KAFKA_BROKERS: ${KAFKA_BROKERS}
       PORT: "8080"
-      SMTP_HOST: "mailpit"
-      SMTP_PORT: "1025"
-      SMTP_FROM: "no-reply@todo.local"
-      AUTH_SERVICE_URL: "http://auth-service:8084"
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_FROM: ${SMTP_FROM}
+      AUTH_SERVICE_URL: http://auth-service:8084
     ports:
       - "8090:8080"
     networks: [app-net]
 
-  # Realtime service (WebSocket)
+  # Realtime service (WebSocket) - scalable via: docker compose up -d --scale realtime=2
   realtime:
     build:
       context: ./realtime
       dockerfile: ./dockerfile
-    container_name: realtime_service
     depends_on:
       kafka:
         condition: service_healthy
       auth-service:
         condition: service_started
+      team-service:
+        condition: service_started
     environment:
-      KAFKA_BROKERS: "dev_kafka:9092"
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-dev_kafka:9092}
       PORT: "8086"
-      ALLOWED_WS_ORIGINS: "http://localhost,http://localhost:5173"
-      INTERNAL_TOKEN: "dev-internal-token"
-      WS_ALLOW_USERID_QUERY: "true"
-    ports:
-      - "8086:8086"
+      ALLOWED_WS_ORIGINS: ${ALLOWED_WS_ORIGINS:-*}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      WS_ALLOW_USERID_QUERY: ${WS_ALLOW_USERID_QUERY:-true}
+      TEAM_API_URL: http://team-service:8083
+      AUTH_SERVICE_URL: http://auth-service:8084
     networks: [app-net]
 
   # Nginx reverse proxy

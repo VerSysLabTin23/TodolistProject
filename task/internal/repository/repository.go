@@ -14,8 +14,10 @@ type TaskRepository interface {
 	ListTasksAcrossTeams(filters models.TaskFilters) ([]models.Task, error)
 	ListTasksByTeams(teamIDs []int, filters models.TaskFilters) ([]models.Task, error)
 	GetByID(id int) (*models.Task, error)
+	GetByRequestID(rid string) (*models.Task, error)
 	Create(t *models.Task) error
 	Update(t *models.Task) error
+	UpdateIfVersionMatches(t *models.Task, expectedVersion int) (bool, error)
 	Delete(id int) error
 	UpdateAssignee(id int, assigneeID *int) error
 	UpdateCompletion(id int, completed bool) error
@@ -158,9 +160,43 @@ func (r *taskRepo) GetByID(id int) (*models.Task, error) {
 	return &t, nil
 }
 
+func (r *taskRepo) GetByRequestID(rid string) (*models.Task, error) {
+	if rid == "" {
+		return nil, nil
+	}
+	var t models.Task
+	if err := r.db.Where("request_id = ?", rid).First(&t).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &t, nil
+}
+
 func (r *taskRepo) Create(t *models.Task) error { return r.db.Create(t).Error }
 func (r *taskRepo) Update(t *models.Task) error { return r.db.Save(t).Error }
-func (r *taskRepo) Delete(id int) error         { return r.db.Delete(&models.Task{}, id).Error }
+
+// UpdateIfVersionMatches performs optimistic concurrency control by matching version
+// Returns true if the update was applied, false if the version mismatch prevented it.
+func (r *taskRepo) UpdateIfVersionMatches(t *models.Task, expectedVersion int) (bool, error) {
+	res := r.db.Model(&models.Task{}).
+		Where("id = ? AND version = ?", t.ID, expectedVersion).
+		Updates(map[string]any{
+			"title":       t.Title,
+			"description": t.Description,
+			"completed":   t.Completed,
+			"priority":    t.Priority,
+			"due":         t.Due,
+			"assignee_id": t.AssigneeID,
+			"version":     expectedVersion + 1,
+		})
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
+}
+func (r *taskRepo) Delete(id int) error { return r.db.Delete(&models.Task{}, id).Error }
 
 func (r *taskRepo) UpdateAssignee(id int, assigneeID *int) error {
 	return r.db.Model(&models.Task{}).Where("id = ?", id).Update("assignee_id", assigneeID).Error
