@@ -3,8 +3,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
     getTask, updateTask, deleteTask, setAssignee, setCompleted, type Task,
 } from "../../api/task";
-import { useRealtime } from "../../realtime/useRealtime.ts";
+import { useRealtime } from "../../realtime/useRealtime";
 import type { TaskEvent } from "../../realtime/ws";
+import {patchFromEventPayload} from "../../realtime/eventPatch.ts";
 
 export default function TaskDetailsPage() {
     const { id } = useParams<{ id: string }>();
@@ -39,10 +40,17 @@ export default function TaskDetailsPage() {
     }, [taskId]);
 
     useRealtime((evt: TaskEvent) => {
-        if (!Number.isFinite(taskId)) return;
-        if (evt.taskId !== taskId) return;
-        setTask(prev => (prev ? { ...prev, ...(evt.payload as Partial<Task>) } : prev));
+        if (!Number.isFinite(taskId) || evt.taskId !== taskId) return;
+
+        if (evt.eventType === "task.deleted") {
+            navigate("/tasks");
+            return;
+        }
+
+        const patch = patchFromEventPayload(evt);
+        setTask(prev => (prev ? ({ ...prev, ...patch }) : prev));
     });
+
 
     async function save(changes: Partial<Task>) {
         if (!task) return;

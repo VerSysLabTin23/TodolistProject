@@ -1,5 +1,3 @@
-import { useState } from "react";
-
 export type TaskEventType =
     | "task.created"
     | "task.updated"
@@ -125,7 +123,13 @@ function notifyStatus(s: Status) {
     statusSubs.forEach((fn) => fn(s));
 }
 function ensureOpen(url: string) {
-    if (ws && ws.readyState === WebSocket.OPEN && url === lastUrl) return;
+    if (
+        ws &&
+        (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) &&
+        url === lastUrl
+    ) {
+        return;
+    }
     if (ws && url !== lastUrl) { try { ws.close(); } catch { /* empty */ } ws = null; }
 
     lastUrl = url;
@@ -204,10 +208,4 @@ export function connectTaskWS(opts: Options = {}) {
             }
         },
     };
-}
-
-/** Optional hook for displaying status */
-export function useWsStatus() {
-    const [status, setStatus] = useState<Status>("closed");
-    return { status, setStatus } as const;
 }

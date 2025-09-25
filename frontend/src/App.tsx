@@ -11,7 +11,6 @@ import TasksPage from "./pages/tasks/TasksPage";
 import TeamsPage from "./pages/teams/TeamsPage";
 import TeamsDetailedPage from "./pages/teams/TeamsDetailedPage";
 import NotFoundPage from "./pages/NotFound.tsx";
-import HistoryPage from "./pages/HistoryPage.tsx";
 import TaskDetailsPage from "./pages/tasks/DetailedTaskPage";
 
 export default function App() {
@@ -32,7 +31,6 @@ export default function App() {
                         <Route path="/teams/:id" element={<TeamsDetailedPage />} />
                         <Route path="/tasks" element={<TasksPage />} />
                         <Route path="/tasks/:id" element={<TaskDetailsPage />} />
-                        <Route path="/history" element={<HistoryPage />} />
                         <Route path="*" element={<NotFoundPage />} />
                     </Route>
                 </Route>

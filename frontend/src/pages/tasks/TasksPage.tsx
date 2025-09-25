@@ -55,7 +55,7 @@ export default function TasksPage() {
     // realtime: refresh list whenever a task.* event arrives
     useRealtime(() => {
         void reload();
-    });
+    }, { throttleMs: 150 });
 
     const teamNameById = useMemo(() => {
         const map = new Map<number, string>();

@@ -46,7 +46,6 @@ export default function Navbar() {
                     <NavLink to="/welcome" style={linkStyle}>Home</NavLink>
                     <NavLink to="/tasks" style={linkStyle}>Tasks</NavLink>
                     <NavLink to="/teams" style={linkStyle}>Teams</NavLink>
-                    <NavLink to="/history" style={linkStyle}>History</NavLink>
                 </>
             ) : null}
 

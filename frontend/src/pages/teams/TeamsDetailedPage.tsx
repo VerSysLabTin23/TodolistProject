@@ -10,7 +10,8 @@ import {
 } from "../../api/task";
 import CreateTeamButton from "../../components/CreateTeamButton";
 import { type TaskEvent } from "../../realtime/ws";
-import {useRealtime} from "../../realtime/useRealtime.ts";
+import {useRealtime} from "../../realtime/useRealtime";
+import {patchFromEventPayload} from "../../realtime/eventPatch.ts";
 
 type NewTaskForm = {
     title: string;
@@ -29,8 +30,6 @@ export default function TeamDetailsPage() {
     const [tasks, setTasks] = useState<Task[]>([]);
     const [loading, setLoading] = useState(true);
     const [creating, setCreating] = useState(false);
-    const [wsStatus, setWsStatus] =
-        useState<"connecting" | "connected" | "closed" | "error">("closed");
 
     const [form, setForm] = useState<NewTaskForm>({
         title: "",
@@ -74,31 +73,39 @@ export default function TeamDetailsPage() {
 
     useRealtime((evt: TaskEvent) => {
         if (evt.teamId !== teamId) return;
+
+        const patch = patchFromEventPayload(evt);
+
         setTasks(prev => {
             switch (evt.eventType) {
-                case "task.created":
-                    return [{
+                case "task.created": {
+                    if (prev.some(t => t.id === evt.taskId)) return prev;
+                    const next = {
                         id: evt.taskId,
                         teamId: evt.teamId,
-                        title: String(evt.payload?.title ?? "New task"),
-                        description: (evt.payload?.description as string | undefined) ?? undefined,
-                        priority: evt.payload?.priority as Task["priority"],
-                        due: evt.payload?.due as string | undefined,
-                        assigneeId:
-                            (evt.payload?.assigneeId as number | undefined) ??
-                            (evt.assigneeId ?? undefined),
-                        completed: Boolean(evt.payload?.completed ?? false),
-                    }, ...prev];
+                        title: patch.title ?? "New task",
+                        description: patch.description,
+                        priority: patch.priority,
+                        due: patch.due,
+                        assigneeId: patch.assigneeId,
+                        completed: Boolean(patch.completed ?? false),
+                    };
+                    return [next, ...prev];
+                }
+
                 case "task.updated":
                 case "task.completed":
-                    return prev.map(t => t.id === evt.taskId ? { ...t, ...(evt.payload as object) } : t);
+                    return prev.map(t => (t.id === evt.taskId ? { ...t, ...patch } : t));
+
                 case "task.deleted":
                     return prev.filter(t => t.id !== evt.taskId);
+
                 default:
                     return prev;
             }
         });
-    }, { onStatus: setWsStatus });
+    }, { throttleMs: 100 });
+
 
     async function onCreate(e: React.FormEvent) {
         e.preventDefault();
@@ -149,7 +156,6 @@ export default function TeamDetailsPage() {
         <section style={{ maxWidth: 1000, margin: "0 auto" }}>
             <h1 style={{ marginBottom: 12 }}>
                 Team: {teamName || `#${teamId}`}{" "}
-                <span style={{ fontSize: 12, color: "#6b7280" }}>({wsStatus})</span>
             </h1>
 
             <CreateTeamButton small />

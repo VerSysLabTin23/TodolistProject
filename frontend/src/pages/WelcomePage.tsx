@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { listUserTeams, type Team } from "../api/team";
 import { listMyTasks, type Task } from "../api/task";
-import { type TaskEvent } from "../realtime/ws";
-import {useRealtime} from "../realtime/useRealtime.ts";
+import type { TaskEvent } from "../realtime/ws";
+import { useRealtime } from "../realtime/useRealtime";
+import { patchFromEventPayload } from "../realtime/eventPatch";
 
 function useCurrentUserId(): number | null {
     return useMemo(() => {
@@ -25,10 +26,8 @@ export default function WelcomePage() {
     const [tasks, setTasks] = useState<Task[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [wsStatus, setWsStatus] =
-        useState<"connecting" | "connected" | "closed" | "error">("closed");
 
-    // A) load teams + tasks (aggregate) once userId is known
+    // initial load
     useEffect(() => {
         let canceled = false;
 
@@ -60,30 +59,39 @@ export default function WelcomePage() {
     }, [userId]);
 
     useRealtime((evt: TaskEvent) => {
+        const patch = patchFromEventPayload(evt);
+
         setTasks(prev => {
             switch (evt.eventType) {
                 case "task.deleted":
                     return prev.filter(t => t.id !== evt.taskId);
-                case "task.created":
-                    return [{
+
+                case "task.created": {
+                    // Only show in “My Tasks” if the backend includes it in listMyTasks (ownership/assignee rules).
+                    // Optimistic add for perceived snappiness, but de-dupe by id:
+                    if (prev.some(t => t.id === evt.taskId)) return prev;
+                    const next = {
                         id: evt.taskId,
                         teamId: evt.teamId,
-                        title: String(evt.payload?.title ?? "New task"),
-                        priority: evt.payload?.priority as Task["priority"],
-                        due: evt.payload?.due as string | undefined,
-                        assigneeId:
-                            (evt.payload?.assigneeId as number | undefined) ??
-                            (evt.assigneeId ?? undefined),
-                        completed: Boolean(evt.payload?.completed ?? false),
-                    }, ...prev];
+                        title: patch.title ?? "New task",
+                        description: patch.description,
+                        priority: patch.priority,
+                        due: patch.due,
+                        assigneeId: patch.assigneeId,
+                        completed: Boolean(patch.completed ?? false),
+                    };
+                    return [next, ...prev];
+                }
+
                 case "task.updated":
                 case "task.completed":
-                    return prev.map(t => t.id === evt.taskId ? { ...t, ...(evt.payload as object) } : t);
+                    return prev.map(t => (t.id === evt.taskId ? { ...t, ...patch } : t));
+
                 default:
                     return prev;
             }
         });
-    }, { onStatus: setWsStatus });
+    }, { throttleMs: 150 });
 
     if (loading) return <div>Loading…</div>;
     if (error) return <div style={{ color: "crimson" }}>{error}</div>;
@@ -92,10 +100,7 @@ export default function WelcomePage() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, alignItems: "start" }}>
             {/* Left: tasks */}
             <section>
-                <h2 style={{ marginBottom: 12 }}>
-                    My Tasks{" "}
-                    <span style={{ marginLeft: 8, fontSize: 12, color: "#6b7280" }}>{wsStatus}</span>
-                </h2>
+                <h2 style={{ marginBottom: 12 }}>My Tasks</h2>
                 {tasks.length === 0 ? (
                     <div style={{ padding: 12, color: "#6b7280" }}>You have no open tasks.</div>
                 ) : (
@@ -120,7 +125,9 @@ export default function WelcomePage() {
                   </span>
                                 )}
                                 {t.due && (
-                                    <span style={{ marginLeft: 8, fontSize: 12, color: "#6b7280" }}>due {t.due}</span>
+                                    <span style={{ marginLeft: 8, fontSize: 12, color: "#6b7280" }}>
+                    due {t.due}
+                  </span>
                                 )}
                             </li>
                         ))}
