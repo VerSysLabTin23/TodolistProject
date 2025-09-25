@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { listMyTasks, type Task } from "../../api/task";
+import { connectTaskWS, type TaskEvent } from "../../realtime/ws";
 import { listUserTeams, type Team } from "../../api/team";
 
 function useCurrentUserId(): number | null {
@@ -39,6 +40,43 @@ export default function TasksPage() {
         load();
         return () => { canceled = true; };
     }, [userId]);
+
+    // Subscribe to realtime updates globally, filter to tasks the user can see
+    useEffect(() => {
+        const sub = connectTaskWS({
+            onEvent: (evt: TaskEvent) => {
+                setTasks((prev) => {
+                    switch (evt.eventType) {
+                        case "task.deleted":
+                            return prev.filter((t) => t.id !== evt.taskId);
+                        case "task.created":
+                            return [
+                                {
+                                    id: evt.taskId,
+                                    teamId: evt.teamId,
+                                    title: String(evt.payload?.title ?? "New task"),
+                                    priority: evt.payload?.priority as Task["priority"],
+                                    due: evt.payload?.due as string | undefined,
+                                    assigneeId:
+                                        (evt.payload?.assigneeId as number | undefined) ??
+                                        (evt.assigneeId ?? undefined),
+                                    completed: Boolean(evt.payload?.completed ?? false),
+                                },
+                                prev.find((t) => t.id === evt.taskId) ? prev.filter((t) => t.id !== evt.taskId) : prev
+                            ].flat();
+                        case "task.updated":
+                        case "task.completed":
+                            return prev.map((t) =>
+                                t.id === evt.taskId ? { ...t, ...(evt.payload as object) } : t
+                            );
+                        default:
+                            return prev;
+                    }
+                });
+            },
+        });
+        return () => sub.close();
+    }, []);
 
     const byTeamName = useMemo(() => {
         const map = new Map<number, string>();

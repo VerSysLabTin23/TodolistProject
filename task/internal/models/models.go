@@ -28,6 +28,10 @@ type Task struct {
 	Due         time.Time `gorm:"column:due;type:date;not null" json:"-"`
 	CreatedAt   time.Time `gorm:"column:created_at;autoCreateTime" json:"-"`
 	UpdatedAt   time.Time `gorm:"column:updated_at;autoUpdateTime" json:"-"`
+	// Version supports optimistic concurrency control; incremented on each successful update
+	Version int `gorm:"column:version;not null;default:1" json:"-"`
+	// RequestID holds an optional idempotency key for create requests
+	RequestID *string `gorm:"column:request_id;uniqueIndex" json:"-"`
 }
 
 // --- DTOs (与 OpenAPI 对齐) ---

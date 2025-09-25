@@ -68,6 +68,18 @@ func NewKafkaConsumer(hub *Hub) *KafkaConsumer {
 	}
 }
 
+// a unique GID for each instance and pass it to the consumer for each topic.
+func instanceGroupID() string {
+	gid := os.Getenv("READER_GROUP_ID_SUFFIX")
+	if gid != "" {
+		return "realtime-" + gid
+	}
+	if hn, err := os.Hostname(); err == nil && hn != "" {
+		return "realtime-" + hn
+	}
+	return fmt.Sprintf("realtime-%d", time.Now().UnixNano())
+}
+
 // Start begins consuming events from Kafka
 func (kc *KafkaConsumer) Start(ctx context.Context) {
 	brokers := os.Getenv("KAFKA_BROKERS")
@@ -75,29 +87,35 @@ func (kc *KafkaConsumer) Start(ctx context.Context) {
 		brokers = "dev_kafka:9092"
 	}
 
-	log.Printf("Starting Kafka consumer with brokers: %s, topics: %v", brokers, kc.topics)
+	gid := instanceGroupID()
+	log.Printf("Starting Kafka consumer with brokers: %s, topics: %v, group=%s", brokers, kc.topics, gid)
 
 	// Create a reader for each topic
 	for _, topic := range kc.topics {
-		go kc.consumeTopic(ctx, brokers, topic)
+		go kc.consumeTopic(ctx, brokers, topic, gid)
 	}
 }
 
 // consumeTopic consumes events from a specific Kafka topic
-func (kc *KafkaConsumer) consumeTopic(ctx context.Context, brokers, topic string) {
+func (kc *KafkaConsumer) consumeTopic(ctx context.Context, brokers, topic, groupID string) {
 	r := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:  []string{brokers},
 		Topic:    topic,
-		GroupID:  "realtime-service",
-		MinBytes: 10e3, // 10KB
-		MaxBytes: 10e6, // 10MB
+		GroupID:  groupID, // gid unique
+		MinBytes: 10e3,
+		MaxBytes: 10e6,
 		MaxWait:  1 * time.Second,
-		// Partition assignment strategy ensures proper load balancing
-		// Events are partitioned by team ID, so related events stay together
 	})
 	defer r.Close()
 
-	log.Printf("Starting consumer for topic: %s", topic)
+	dlqWriter := &kafka.Writer{
+		Addr:         kafka.TCP(brokers),
+		RequiredAcks: kafka.RequireOne,
+		Async:        false,
+	}
+	defer dlqWriter.Close()
+
+	log.Printf("Starting consumer for topic: %s (group=%s)", topic, groupID)
 
 	for {
 		select {
@@ -114,17 +132,21 @@ func (kc *KafkaConsumer) consumeTopic(ctx context.Context, brokers, topic string
 				continue
 			}
 
-			// log.Printf("[kafka] %s key=%s value=%s", topic, string(m.Key), string(m.Value))
 			log.Printf("[kafka] topic=%s key=%s value_len=%d", topic, string(m.Key), len(m.Value))
 
-			// Parse the event
 			var event KafkaEvent
 			if err := json.Unmarshal(m.Value, &event); err != nil {
 				log.Printf("Failed to parse event from topic %s: %v", topic, err)
+				_ = dlqWriter.WriteMessages(ctx, kafka.Message{
+					Topic:   topic + ".deadletter",
+					Key:     m.Key,
+					Value:   m.Value,
+					Time:    time.Now(),
+					Headers: append(m.Headers, kafka.Header{Key: "error", Value: []byte("json_unmarshal_failed")}),
+				})
 				continue
 			}
 
-			// Convert to unified event and broadcast to relevant users
 			unifiedEvent := kc.convertToUnifiedEvent(event)
 			if unifiedEvent != nil {
 				targetUsers := kc.resolveTargetUsers(event)

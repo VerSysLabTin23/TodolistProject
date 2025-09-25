@@ -153,6 +153,16 @@ func (h *TaskHandlers) CreateTaskInTeam(c *gin.Context) {
 		return
 	}
 
+	// Idempotency: optional Idempotency-Key header
+	var requestID *string
+	if rid := c.GetHeader("Idempotency-Key"); rid != "" {
+		requestID = &rid
+		if existing, err := h.repo.GetByRequestID(rid); err == nil && existing != nil {
+			c.JSON(http.StatusOK, models.MapTask(*existing))
+			return
+		}
+	}
+
 	t := &models.Task{
 		TeamID:      teamID,
 		CreatorID:   creatorID,
@@ -162,6 +172,7 @@ func (h *TaskHandlers) CreateTaskInTeam(c *gin.Context) {
 		Completed:   false,
 		Priority:    models.Priority(req.Priority),
 		Due:         due,
+		RequestID:   requestID,
 	}
 
 	if err := h.repo.Create(t); err != nil {
@@ -352,9 +363,42 @@ func (h *TaskHandlers) UpdateTask(c *gin.Context) {
 		t.AssigneeID = req.AssigneeID
 	}
 
-	if err := h.repo.Update(t); err != nil {
-		c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", err.Error()))
-		return
+	// Optimistic concurrency: If-Match or X-Resource-Version header
+	// If provided, attempt version-matched update; else fall back to simple update
+	ifMatch := c.GetHeader("If-Match")
+	if ifMatch == "" {
+		ifMatch = c.GetHeader("X-Resource-Version")
+	}
+	if ifMatch != "" {
+		// tiny atoi without importing strconv
+		ver := 0
+		for i := 0; i < len(ifMatch); i++ {
+			ch := ifMatch[i]
+			if ch < '0' || ch > '9' {
+				ver = 0
+				break
+			}
+			ver = ver*10 + int(ch-'0')
+		}
+		if ver <= 0 {
+			ver = t.Version
+		}
+		ok, err := h.repo.UpdateIfVersionMatches(t, ver)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", err.Error()))
+			return
+		}
+		if !ok {
+			c.JSON(http.StatusConflict, errResp("CONFLICT", "resource was updated by another request"))
+			return
+		}
+		t.Version = ver + 1
+	} else {
+		if err := h.repo.Update(t); err != nil {
+			c.JSON(http.StatusInternalServerError, errResp("INTERNAL_ERROR", err.Error()))
+			return
+		}
+		// Version is incremented by DB trigger in UpdateIfVersionMatches path only; keep as-is here
 	}
 
 	c.JSON(http.StatusOK, models.MapTask(*t))
