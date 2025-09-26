@@ -1,3 +1,28 @@
+// Team administration page (for a single team).
+// Purpose:
+// - Load team metadata and current members.
+// - Allow editing basic team properties (name, description).
+// - Allow inviting a new member by numeric userId.
+// - Allow removing a member.
+// - Allow deleting the team (irreversible) and returning to /teams.
+//
+// Data flow:
+// 1) On mount, fetch team and members in parallel → hydrate local state and edit form.
+// 2) "Dirty" flag is derived from a memo that compares form vs. loaded team.
+// 3) Save: PATCH team (defensive trim), then update state with returned server copy.
+// 4) Invite: validate numeric userId, add member, then refresh member list.
+// 5) Remove: confirm, call remove, optimistically filter from local state.
+// 6) Delete: confirm, delete team, navigate back to list.
+//
+// Error handling:
+// - All mutating operations set `saving=true` and surface errors into `state.error`.
+// - Read failures surface into `state.error` and stop the loading spinner.
+// - A simple `confirm()` is used for destructive actions.
+//
+// UX notes:
+// - The "Back to Team tasks" link returns to the non-admin team view.
+// - "Save changes" is enabled only when the form is dirty and not saving.
+
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import {
@@ -12,6 +37,12 @@ import {
     type TeamPatch,
 } from "../../api/team";
 
+// Aggregate local UI state for this screen.
+// - `team`: the canonical server copy for comparison and rendering.
+// - `members`: current membership list.
+// - `loading`: initial data is being fetched.
+// - `saving`: a mutation is in-flight (save/invite/remove/delete).
+// - `error`: user-friendly error text for inline display.
 type State = {
     team: Team | null;
     members: TeamMember[];
@@ -21,10 +52,12 @@ type State = {
 };
 
 export default function TeamsDetailedPage() {
+    // Router params and navigation helper.
     const { id } = useParams();
     const teamId = Number(id);
     const navigate = useNavigate();
 
+    // Page state: canonical data, spinners, and errors.
     const [state, setState] = useState<State>({
         team: null,
         members: [],
@@ -33,9 +66,13 @@ export default function TeamsDetailedPage() {
         error: null,
     });
 
+    // Edit form model for PATCH. Initialized after team load.
     const [form, setForm] = useState<TeamPatch>({ name: "", description: "" });
+
+    // Temporary input for "invite by userId".
     const [inviteId, setInviteId] = useState<string>("");
 
+    // Derived "dirty" flag—only enable "Save" when the form differs from the loaded team.
     const dirty = useMemo(
         () =>
             state.team
@@ -45,6 +82,8 @@ export default function TeamsDetailedPage() {
         [form, state.team]
     );
 
+    // Initial load: fetch team + members concurrently.
+    // The `cancel` guard prevents state updates after unmount.
     useEffect(() => {
         let cancel = false;
         (async () => {
@@ -56,6 +95,7 @@ export default function TeamsDetailedPage() {
                 ]);
                 if (cancel) return;
                 setState({ team: t, members: ms, loading: false, saving: false, error: null });
+                // Seed the form with server values (avoid undefineds).
                 setForm({ name: t.name, description: t.description ?? "" });
             } catch (e) {
                 setState((s) => ({
@@ -68,6 +108,7 @@ export default function TeamsDetailedPage() {
         return () => { cancel = true; };
     }, [teamId]);
 
+    // Persist team edits. Defensive trimming and fallback values protect against empty payloads.
     async function onSaveTeam(e: React.FormEvent) {
         e.preventDefault();
         if (!state.team || !dirty) return;
@@ -77,6 +118,7 @@ export default function TeamsDetailedPage() {
                 name: form.name?.trim() || state.team.name,
                 description: form.description?.trim() || "",
             });
+            // Replace canonical team in state with the authoritative server response.
             setState((s) => ({ ...s, team: updated, saving: false }));
         } catch (e) {
             setState((s) => ({
@@ -87,11 +129,13 @@ export default function TeamsDetailedPage() {
         }
     }
 
+    // Invite a member by numeric userId. On success, re-fetch members for consistency.
     async function onInvite(e: React.FormEvent) {
         e.preventDefault();
         if (!state.team) return;
 
         const trimmed = inviteId.trim();
+        // Input-level validation to prevent accidental strings or empty values.
         if (!/^\d+$/.test(trimmed)) {
             setState(s => ({ ...s, error: "Please enter a numeric user ID." }));
             return;
@@ -101,6 +145,7 @@ export default function TeamsDetailedPage() {
         try {
             setState(s => ({ ...s, saving: true, error: null }));
             await adminAddMember(state.team.id, userId, "MEMBER");
+            // Pull the fresh list to reflect server-side role defaults or normalization.
             const ms = await listTeamMembers(state.team.id);
             setState(s => ({ ...s, members: ms, saving: false }));
             setInviteId("");
@@ -113,6 +158,7 @@ export default function TeamsDetailedPage() {
         }
     }
 
+    // Remove member with a guard confirm. Optimistic local removal after success.
     async function onRemoveMember(userId: number) {
         if (!state.team) return;
         if (!confirm("Remove this member from the team?")) return;
@@ -133,6 +179,7 @@ export default function TeamsDetailedPage() {
         }
     }
 
+    // Delete team with a guard confirm. On success, redirect to the team list.
     async function onDeleteTeam() {
         if (!state.team) return;
         if (!confirm("Delete this team? This cannot be undone.")) return;
@@ -149,12 +196,14 @@ export default function TeamsDetailedPage() {
         }
     }
 
+    // Basic loading/error/empty guards to keep the render path simple and predictable.
     if (state.loading) return <div>Loading…</div>;
     if (state.error) return <div style={{ color: "crimson" }}>{state.error}</div>;
     if (!state.team) return null;
 
     return (
         <div style={{ maxWidth: 760 }}>
+            {/* Header with back-link to the non-admin team task view and a destructive "Delete" action */}
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
                 <h2 style={{ margin: 0 }}>Team #{state.team.id}</h2>
                 <Link to={`/teams/${teamId}`}>Back to Team tasks</Link>
@@ -165,7 +214,7 @@ export default function TeamsDetailedPage() {
                 </div>
             </div>
 
-            {/* Edit team */}
+            {/* Team edit form: simple two-field PATCH with dirty/save state */}
             <form onSubmit={onSaveTeam} style={{ display: "grid", gap: 12, marginBottom: 20 }}>
                 <label style={{ display: "grid", gap: 6 }}>
                     <span>Name</span>
@@ -192,7 +241,7 @@ export default function TeamsDetailedPage() {
                 </div>
             </form>
 
-            {/* Invite by numeric userID */}
+            {/* Minimal "invite by userId" utility. A richer UX could search by username/email. */}
             <form onSubmit={onInvite} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 20 }}>
                 <strong>Invite by user ID:</strong>
                 <input
@@ -208,7 +257,7 @@ export default function TeamsDetailedPage() {
                 </button>
             </form>
 
-            {/* Members */}
+            {/* Members section with inline "Remove" actions */}
             <div style={{ marginTop: 8 }}>
                 <h3 style={{ margin: "8px 0" }}>Members</h3>
                 {state.members.length === 0 ? (
@@ -242,6 +291,7 @@ export default function TeamsDetailedPage() {
     );
 }
 
+// Inline style tokens for visual consistency with the rest of the app.
 const input: React.CSSProperties = {
     border: "1px solid #e5e7eb",
     borderRadius: 8,

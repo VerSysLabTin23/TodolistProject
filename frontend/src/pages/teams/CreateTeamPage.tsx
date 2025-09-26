@@ -1,7 +1,11 @@
+// Create a new team, then (best-effort) add the current user as OWNER,
+// and redirect to the new team’s task view.
+
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createTeam, addMember, type Team } from "../../api/team";
 
+// Helper to read current user id from localStorage
 function currentUserId(): number | null {
     try {
         const raw = localStorage.getItem("currentUser");
@@ -13,13 +17,15 @@ function currentUserId(): number | null {
 
 export default function CreateTeamPage() {
     const navigate = useNavigate();
-    const uid = useMemo(currentUserId, []);
+    const uid = useMemo(currentUserId, []); // compute once
 
+    // Form + request state
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
     const [saving, setSaving] = useState(false);
     const [err, setErr] = useState<string | null>(null);
 
+    // Submit handler
     async function submit(e: React.FormEvent) {
         e.preventDefault();
         if (!name.trim()) { setErr("Name is required"); return; }
@@ -27,18 +33,18 @@ export default function CreateTeamPage() {
         setErr(null);
         setSaving(true);
         try {
-            // 1) create team
+            // 1) Create team with name/description
             const team: Team = await createTeam({
                 name: name.trim(),
                 description: description.trim() || undefined,
             });
 
-            // 2) ensure creator is OWNER (uppercase as per api/team.ts)
+            // 2) Ensure creator is OWNER (ignore 409/conflict errors)
             if (uid != null) {
-                try { await addMember(team.id, uid, "OWNER"); } catch { /* ignore 409/etc */ }
+                try { await addMember(team.id, uid, "OWNER"); } catch { /* ignore */ }
             }
 
-            // 3) go to the new team detail page
+            // 3) Navigate to the new team task page
             navigate(`/teams/${team.id}`);
         } catch (e) {
             const msg = e instanceof Error ? e.message : "Failed to create team";
@@ -48,6 +54,7 @@ export default function CreateTeamPage() {
         }
     }
 
+    // UI form
     return (
         <section style={{ maxWidth: 700, margin: "0 auto" }}>
             <h1>Create a new team</h1>

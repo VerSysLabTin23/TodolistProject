@@ -1,4 +1,35 @@
-// src/App.tsx
+// Application router and layout composition.
+// Purpose:
+// - Define public vs. private route trees and mount the correct layout shells.
+// - Mount a global RealtimeRoot ONLY for authenticated routes (saves WS resources).
+// - Wire up admin-only routes behind the <RequireAdmin/> guard.
+//
+// Structure:
+//   Public (AuthLayout):
+//     /            → LoginPage
+//     /register    → RegisterPage
+//
+//   Private (AppLayout) + RequireAuth + RealtimeShell:
+//     /welcome                 → WelcomePage
+//     /teams                   → TeamsPage
+//     /teams/new               → CreateTeamPage
+//     /teams/:id               → TeamTasksPage
+//     /teams/:id/manage        → TeamsDetailedPage
+//     /tasks                   → TasksPage
+//     /tasks/:id               → TaskDetailsPage
+//     /completed               → CompletedPage
+//     *                        → NotFoundPage
+//
+//   Admin (RequireAdmin):
+//     /admin/users             → UsersAdminPage
+//     /admin/teams             → TeamsAdminPage
+//     /admin/teams/:id         → TeamAdminDetailPage
+//
+// Notes:
+// - If your <RequireAdmin/> does not imply auth, you can also nest admin routes
+//   under <AppLayout><RequireAuth>...</RequireAuth></AppLayout> to reuse the navbar.
+// - RealtimeShell mounts <RealtimeRoot/> so WS is active only inside the private area.
+
 import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
 
 import AuthLayout from "./layouts/AuthLayout";
@@ -64,8 +95,9 @@ export default function App() {
                     </Route>
                 </Route>
 
-                {/* ADMIN (if your RequireAdmin already checks auth, this can stay top-level;
-           otherwise you can also nest it under AppLayout/RequireAuth similarly) */}
+                {/* ADMIN
+                   If <RequireAdmin/> already implies authentication (via localStorage),
+                   it can live top-level. Otherwise, nest under AppLayout/RequireAuth. */}
                 <Route element={<RequireAdmin />}>
                     <Route path="/admin/users" element={<UsersAdminPage />} />
                     <Route path="/admin/teams" element={<TeamsAdminPage />} />

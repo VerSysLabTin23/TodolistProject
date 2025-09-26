@@ -1,24 +1,30 @@
+// Cross-team task list for the current user with realtime updates,
+// quick toggle complete, and delete actions.
+
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-    listMyTasks,
-    setCompleted,
-    deleteTask,
+    listMyTasks,  // GET /tasks
+    setCompleted, // POST /tasks/:id/complete
+    deleteTask,   // DELETE /tasks/:id
     type Task,
 } from "../../api/task";
 import type { TaskEvent } from "../../realtime/ws";
 import { useRealtime } from "../../realtime/useRealtime";
 import { patchFromEventPayload } from "../../realtime/eventPatch";
 
+// Normalize unknown → string
 function errorMessage(e: unknown): string {
     return e instanceof Error ? e.message : String(e);
 }
 
 export default function TasksPage() {
+    // Local state for tasks and request flags
     const [tasks, setTasks] = useState<Task[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    // Initial load of "my tasks"
     useEffect(() => {
         (async () => {
             try {
@@ -32,12 +38,14 @@ export default function TasksPage() {
         })();
     }, []);
 
+    // Realtime updates: create/update/complete/delete
     useRealtime(
         (evt: TaskEvent) => {
             const patch = patchFromEventPayload(evt); // Partial<Task>
             setTasks((prev) => {
                 switch (evt.eventType) {
                     case "task.created":
+                        // Prepend only if not already present
                         if (prev.some((t) => t.id === evt.taskId)) return prev;
                         return [
                             {
@@ -62,16 +70,17 @@ export default function TasksPage() {
         { throttleMs: 120 }
     );
 
+    // Toggle completion (optimistic update)
     async function toggleComplete(t: Task) {
         try {
             await setCompleted(t.id, !t.completed);
-            // optimistic; realtime will sync
             setTasks((prev) => prev.map((x) => (x.id === t.id ? { ...x, completed: !x.completed } : x)));
         } catch (e: unknown) {
             setError(errorMessage(e) || "Failed to update status.");
         }
     }
 
+    // Delete with confirmation
     async function remove(t: Task) {
         if (!confirm("Delete this task?")) return;
         try {
@@ -82,9 +91,11 @@ export default function TasksPage() {
         }
     }
 
+    // Guards
     if (loading) return <div>Loading…</div>;
     if (error) return <div style={{ color: "crimson" }}>{error}</div>;
 
+    // UI list
     return (
         <div>
             <h2 style={{ marginBottom: 12 }}>My Tasks</h2>
@@ -106,6 +117,7 @@ export default function TasksPage() {
                                 marginBottom: 8,
                             }}
                         >
+                            {/* Click title to open full editor */}
                             <Link to={`/tasks/${t.id}`} style={{ textDecoration: t.completed ? "line-through" : "none" }}>
                                 {t.title}
                             </Link>
@@ -123,6 +135,7 @@ export default function TasksPage() {
     );
 }
 
+// Button styles
 const btnSecondary: React.CSSProperties = {
     padding: "6px 10px",
     borderRadius: 8,
