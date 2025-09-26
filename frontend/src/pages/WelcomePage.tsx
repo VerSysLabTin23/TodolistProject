@@ -2,10 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { listUserTeams, type Team } from "../api/team";
 import { listMyTasks, type Task } from "../api/task";
-import type { TaskEvent } from "../realtime/ws";
-import { useRealtime } from "../realtime/useRealtime";
-import { patchFromEventPayload } from "../realtime/eventPatch";
 
+// Read current user once from localStorage
 function useCurrentUserId(): number | null {
     return useMemo(() => {
         try {
@@ -19,6 +17,11 @@ function useCurrentUserId(): number | null {
     }, []);
 }
 
+// runtime guard (prevents `.map` crash)
+function toArray<T>(value: unknown): T[] {
+    return Array.isArray(value) ? (value as T[]) : [];
+}
+
 export default function WelcomePage() {
     const userId = useCurrentUserId();
 
@@ -27,71 +30,54 @@ export default function WelcomePage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // initial load
     useEffect(() => {
-        let canceled = false;
+        let cancel = false;
 
         async function load() {
+            setError(null);
+            setLoading(true);
+
             if (!userId) {
                 setError("No authenticated user found. Please log in again.");
                 setLoading(false);
                 return;
             }
+
             try {
-                const [userTeams, myTasks] = await Promise.all([
+                const [tms, tks] = await Promise.all([
                     listUserTeams(userId),
                     listMyTasks(),
                 ]);
-                if (canceled) return;
-                setTeams(userTeams);
-                setTasks(myTasks);
-            } catch {
-                if (!canceled) setError("Failed to load data. Check services and your token.");
+
+                if (cancel) return;
+
+                // Validate shapes to avoid `.map` on non-array
+                if (!Array.isArray(tms)) {
+                    throw new Error("Team API returned unexpected shape.");
+                }
+                if (!Array.isArray(tks)) {
+                    throw new Error("Task API returned unexpected shape.");
+                }
+
+                setTeams(toArray<Team>(tms));
+                setTasks(toArray<Task>(tks));
+            } catch (e) {
+                const msg =
+                    e instanceof Error ? e.message : "Failed to load data. Check services and your token.";
+                setError(msg);
+                // still render with empty arrays (no crash)
+                setTeams([]);
+                setTasks([]);
             } finally {
-                if (!canceled) setLoading(false);
+                if (!cancel) setLoading(false);
             }
         }
 
         load();
         return () => {
-            canceled = true;
+            cancel = true;
         };
     }, [userId]);
-
-    useRealtime((evt: TaskEvent) => {
-        const patch = patchFromEventPayload(evt);
-
-        setTasks(prev => {
-            switch (evt.eventType) {
-                case "task.deleted":
-                    return prev.filter(t => t.id !== evt.taskId);
-
-                case "task.created": {
-                    // Only show in “My Tasks” if the backend includes it in listMyTasks (ownership/assignee rules).
-                    // Optimistic add for perceived snappiness, but de-dupe by id:
-                    if (prev.some(t => t.id === evt.taskId)) return prev;
-                    const next = {
-                        id: evt.taskId,
-                        teamId: evt.teamId,
-                        title: patch.title ?? "New task",
-                        description: patch.description,
-                        priority: patch.priority,
-                        due: patch.due,
-                        assigneeId: patch.assigneeId,
-                        completed: Boolean(patch.completed ?? false),
-                    };
-                    return [next, ...prev];
-                }
-
-                case "task.updated":
-                case "task.completed":
-                    return prev.map(t => (t.id === evt.taskId ? { ...t, ...patch } : t));
-
-                default:
-                    return prev;
-            }
-        });
-    }, { throttleMs: 150 });
 
     if (loading) return <div>Loading…</div>;
     if (error) return <div style={{ color: "crimson" }}>{error}</div>;
@@ -116,7 +102,7 @@ export default function WelcomePage() {
                                     background: "#fff",
                                 }}
                             >
-                                <Link to={`/tasks/${t.id}`} style={{ textDecoration: "none" }}>
+                                <Link to={`/tasks/${t.id}`} style={{ textDecoration: t.completed ? "line-through" : "none" }}>
                                     <strong>{t.title}</strong>
                                 </Link>
                                 {t.priority && (

@@ -1,4 +1,6 @@
-import { Routes, Route, BrowserRouter } from "react-router-dom";
+// src/App.tsx
+import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
+
 import AuthLayout from "./layouts/AuthLayout";
 import AppLayout from "./layouts/AppLayout";
 import RequireAuth from "./routes/RequireAuth";
@@ -17,16 +19,27 @@ import RequireAdmin from "./routes/RequireAdmin.tsx";
 import UsersAdminPage from "./pages/admin/UsersAdminPage.tsx";
 import TeamsAdminPage from "./pages/admin/TeamsAdminPage.tsx";
 import TeamAdminDetailPage from "./pages/admin/TeamAdminDetailPage.tsx";
-import RealtimeRoot from "./realtime/RealtimeRoot";
 import CompletedPage from "./pages/CompletedPage";
+
+// IMPORTANT: keep WS mounted only for authenticated routes
+import RealtimeRoot from "./realtime/RealtimeRoot";
+
+// Tiny wrapper that mounts the realtime socket and then renders the nested
+// private routes via <Outlet/>. This avoids creating the socket on the login page.
+function RealtimeShell() {
+    return (
+        <>
+            <RealtimeRoot />
+            <Outlet />
+        </>
+    );
+}
 
 export default function App() {
     return (
         <BrowserRouter>
-            <RealtimeRoot />  {/* keep WS alive globally */}
-
-            {/* Public (no navbar) */}
             <Routes>
+                {/* Public (no navbar) */}
                 <Route element={<AuthLayout />}>
                     <Route path="/" element={<LoginPage />} />
                     <Route path="/register" element={<RegisterPage />} />
@@ -35,18 +48,22 @@ export default function App() {
                 {/* Private (with navbar) */}
                 <Route element={<AppLayout />}>
                     <Route element={<RequireAuth />}>
-                        <Route path="/welcome" element={<WelcomePage />} />
-                        <Route path="/teams" element={<TeamsPage />} />
-                        <Route path="/teams/new" element={<CreateTeamPage />} />
-                        <Route path="/teams/:id" element={<TeamsDetailedPage />} />
-                        <Route path="/tasks" element={<TasksPage />} />
-                        <Route path="/tasks/:id" element={<TaskDetailsPage />} />
-                        <Route path="*" element={<NotFoundPage />} />
-                        <Route path="/completed" element={<CompletedPage />} />
+                        {/* Mount WS only for authenticated area */}
+                        <Route element={<RealtimeShell />}>
+                            <Route path="/welcome" element={<WelcomePage />} />
+                            <Route path="/teams" element={<TeamsPage />} />
+                            <Route path="/teams/new" element={<CreateTeamPage />} />
+                            <Route path="/teams/:id" element={<TeamsDetailedPage />} />
+                            <Route path="/tasks" element={<TasksPage />} />
+                            <Route path="/tasks/:id" element={<TaskDetailsPage />} />
+                            <Route path="/completed" element={<CompletedPage />} />
+                            <Route path="*" element={<NotFoundPage />} />
+                        </Route>
                     </Route>
                 </Route>
 
-                {/* ADMIN */}
+                {/* ADMIN (if your RequireAdmin already checks auth, this can stay top-level;
+           otherwise you can also nest it under AppLayout/RequireAuth similarly) */}
                 <Route element={<RequireAdmin />}>
                     <Route path="/admin/users" element={<UsersAdminPage />} />
                     <Route path="/admin/teams" element={<TeamsAdminPage />} />
