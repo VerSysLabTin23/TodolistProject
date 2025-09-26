@@ -1,4 +1,20 @@
-import {useState} from "react";
+// WebSocket client for task events (singleton).
+// Purpose:
+// - Provide a resilient, shared WS connection for the entire app.
+// - Normalize diverse backend message formats into a common TaskEvent.
+// - Expose a small subscription API (events + status) and auto-reconnect.
+//
+// Design choices:
+// - Singleton socket shared by all subscribers to avoid multiple connections.
+// - Backoff reconnection (exponential up to 30s).
+// - Heartbeat ping every 25s to keep idle connections alive.
+// - URL construction includes userId and token as query parameters.
+// - Input adaptation supports both {type, data} and {eventType, payload}.
+//
+// Security:
+// - Token is read from localStorage (or provided via Options) and appended as
+//   a query parameter. If a header-based auth is preferred, the server and
+//   client must be adjusted accordingly.
 
 export type TaskEventType =
     | "task.created"
@@ -22,11 +38,20 @@ type Status = "connecting" | "connected" | "closed" | "error";
 export interface Options {
     onEvent?: (e: TaskEvent) => void;
     onStatus?: (s: Status) => void;
-    baseUrl?: string;       // default /ws
+    baseUrl?: string;       // default /ws (proxied)
     userId?: number | null; // default from localStorage.currentUser.id
     token?: string | null;  // optional fallback
 }
 
+declare global {
+    interface Window {
+        __DEBUG_WS__?: boolean;
+    }
+}
+
+/* ---------- Utilities: user & event normalization ---------- */
+
+// Pull userId from currentUser in localStorage; tolerate missing/invalid JSON.
 function readUserId(): number | null {
     try {
         const raw = localStorage.getItem("currentUser");
@@ -38,191 +63,207 @@ function readUserId(): number | null {
     }
 }
 
-// --- Singleton WebSocket manager ---
-let socket: WebSocket | null = null;
-let currentStatus: Status = "closed";
-let reconnectAttempts = 0;
-let reconnectTimer: number | null = null;
-const eventListeners = new Set<(e: TaskEvent) => void>();
-const statusListeners = new Set<(s: Status) => void>();
-let DEBUG = false;
+// First finite number from a set of candidates; used to map BE variant fields.
+function firstNumber(values: unknown[], fallback = -1): number {
+    for (const v of values) {
+        const n = Number(v);
+        if (Number.isFinite(n)) return n;
+    }
+    return fallback;
+}
 
+// Accept multiple naming conventions (camelCase, snake_case, flat)
+// and canonicalize to the four allowed TaskEventType variants.
+function normalizeType(t: unknown): TaskEventType | null {
+    if (typeof t !== "string" || !t) return null;
+    let s = t.replace(/([a-z])([A-Z])/g, "$1.$2").replace(/[_\s]+/g, ".").toLowerCase();
+    if (s === "taskcreated") s = "task.created";
+    if (s === "taskupdated") s = "task.updated";
+    if (s === "taskdeleted") s = "task.deleted";
+    if (s === "taskcompleted") s = "task.completed";
+    const ok = ["task.created", "task.updated", "task.deleted", "task.completed"] as const;
+    return (ok as readonly string[]).includes(s) ? (s as TaskEventType) : null;
+}
+
+/* ---------- Backend variants & adaptation ---------- */
+
+type BackendTask = {
+    id?: number;
+    taskId?: number;
+    teamId?: number;
+    actorId?: number;
+    creatorId?: number;
+    assigneeId?: number | null;
+    timestamp?: string;
+    task?: { id?: number; teamId?: number; creatorId?: number; assigneeId?: number | null } & Record<string, unknown>;
+} & Record<string, unknown>;
+type BE1 = { type: string; data: BackendTask };
+type BE2 = { eventType: string; payload: BackendTask };
+type Incoming = BE1 | BE2;
+
+function isBE1(m: unknown): m is BE1 {
+    return typeof m === "object" && m !== null && "type" in (m as Record<string, unknown>) && "data" in (m as Record<string, unknown>);
+}
+function isBE2(m: unknown): m is BE2 {
+    return typeof m === "object" && m !== null && "eventType" in (m as Record<string, unknown>) && "payload" in (m as Record<string, unknown>);
+}
+
+// Convert incoming wire message into a canonical TaskEvent or null if invalid.
+// - Chooses the right object (`task` nested vs. flat) as the key source.
+// - Picks the first available ID for taskId/teamId across variants.
+// - Ensures we always emit a timestamp (server-provided or local fallback).
+function adaptIncoming(raw: unknown): TaskEvent | null {
+    let kind: string | null = null;
+    let core: BackendTask = {};
+    if (isBE1(raw)) { kind = raw.type; core = raw.data ?? {}; }
+    else if (isBE2(raw)) { kind = raw.eventType; core = raw.payload ?? {}; }
+    else return null;
+
+    const eventType = normalizeType(kind);
+    if (!eventType) return null;
+
+    const t = (typeof core.task === "object" && core.task) ? core.task : core;
+    const taskId = firstNumber([t?.id, core.taskId], -1);
+    const teamId = firstNumber([t?.teamId, core.teamId], -1);
+    const actorId = firstNumber([core.actorId], -1);
+    const creatorId = firstNumber([t?.creatorId, core.creatorId], -1);
+    const assigneeIdRaw = t?.assigneeId ?? core.assigneeId;
+    const timestamp = typeof core.timestamp === "string" ? core.timestamp : new Date().toISOString();
+
+    return {
+        eventType,
+        taskId,
+        teamId,
+        actorId,
+        creatorId,
+        assigneeId: assigneeIdRaw === undefined ? undefined : firstNumber([assigneeIdRaw]),
+        timestamp,
+        payload: core as Record<string, unknown>,
+    };
+}
+
+/* ---------------- Singleton connection ---------------- */
+
+// Subscriber registries
+type Subscriber = (e: TaskEvent) => void;
+let ws: WebSocket | null = null;
+const subs = new Set<Subscriber>();
+const statusSubs = new Set<(s: Status) => void>();
+
+// Connection lifecycle flags
+let heartbeatId: number | null = null;
+let stopped = false;
+let attempts = 0;
+let lastUrl = "";
+
+// Notify all status listeners; used on open/close/error transitions.
 function notifyStatus(s: Status) {
-    currentStatus = s;
-    if (DEBUG) {
-        try { console.log("WS STATUS:", s); } catch { /* ignore */ }
-    }
-    statusListeners.forEach((fn) => {
-        try { fn(s); } catch { /* ignore */ }
-    });
+    statusSubs.forEach((fn) => fn(s));
 }
 
-function normalizeEvent(raw: any): TaskEvent | null {
-    // Handle legacy format with "eventType" field
-    if (raw && typeof raw === "object" && "eventType" in raw) {
-        return raw as TaskEvent;
-    }
-    
-    // Handle new UnifiedEvent format from realtime service
-    if (raw && typeof raw === "object" && "type" in raw) {
-        const type = String(raw.type);
-        if (type.startsWith("task.")) {
-            const data = raw.data ?? {};
-            return {
-                eventType: type as TaskEventType,
-                taskId: Number(data.taskId ?? data.id ?? 0),
-                teamId: Number(raw.teamId ?? data.teamId ?? 0),
-                actorId: Number(raw.actorId ?? 0),
-                creatorId: Number(data.creatorId ?? 0),
-                assigneeId: (data.assigneeId ?? null) as number | null,
-                timestamp: String(raw.timestamp ?? new Date().toISOString()),
-                payload: {
-                    title: data.title,
-                    description: data.description,
-                    priority: data.priority,
-                    due: data.due,
-                    completed: data.completed,
-                    assigneeId: data.assigneeId,
-                } as Record<string, unknown>,
-            };
-        }
-    }
-    return null;
-}
-
-function computeBackoffMs(attempt: number): number {
-    const base = 1000; // 1s
-    const max = 30000; // 30s
-    const expo = Math.min(max, base * Math.pow(2, attempt));
-    const jitter = Math.floor(Math.random() * 300);
-    return expo + jitter;
-}
-
-function getBaseUrl(): string { return (import.meta.env.VITE_WS_URL ?? "/ws") as string; }
-
-function ensureConnected() {
-    if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+// Ensure a socket to a given URL is open (or already connecting/open).
+// - Closes any existing socket if the URL target changes.
+// - Handles onopen/onmessage/onerror/onclose, including backoff reconnect.
+function ensureOpen(url: string) {
+    if (
+        ws &&
+        (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) &&
+        url === lastUrl
+    ) {
         return;
     }
-    const base = getBaseUrl();
-    const uid = readUserId();
-    const token = localStorage.getItem("accessToken") ?? "";
-    const qs = uid != null ? `userId=${encodeURIComponent(String(uid))}` : `token=${encodeURIComponent(token)}`;
-    const url = `${base}?${qs}`;
-    const protocols = token ? [ token ] : undefined;
+    if (ws && url !== lastUrl) { try { ws.close(); } catch { /* empty */ } ws = null; }
 
-    try {
-        socket = protocols ? new WebSocket(url, protocols) : new WebSocket(url);
+    lastUrl = url;
+    stopped = false;
+
+    const open = () => {
+        if (stopped) return;
         notifyStatus("connecting");
-    } catch {
-        scheduleReconnect();
-        return;
-    }
+        ws = new WebSocket(url);
 
-    socket.onopen = () => {
-        reconnectAttempts = 0;
-        notifyStatus("connected");
-    };
-    socket.onmessage = (msg: MessageEvent<string>) => {
-        try {
-            const parsed = JSON.parse(msg.data);
-            if (DEBUG) {
-                try { console.log("WS RAW MESSAGE:", parsed); } catch { /* ignore */ }
-            }
-            const evt = normalizeEvent(parsed);
-            if (evt) {
-                if (DEBUG) {
-                    try { console.log("WS NORMALIZED EVENT:", evt); } catch { /* ignore */ }
-                }
-                eventListeners.forEach((fn) => {
-                    try { 
-                        fn(evt); 
-                        if (DEBUG) {
-                            try { console.log("WS EVENT HANDLER CALLED for event:", evt.eventType); } catch { /* ignore */ }
-                        }
-                    } catch (error) { 
-                        if (DEBUG) {
-                            try { console.error("WS EVENT HANDLER ERROR:", error); } catch { /* ignore */ }
-                        }
+        ws.onopen = () => {
+            attempts = 0;
+            notifyStatus("connected");
+            // Keep the connection alive on idle intermediaries (proxies/load balancers).
+            heartbeatId = window.setInterval(() => {
+                try {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: "ping" }));
                     }
-                });
-            } else {
-                if (DEBUG) {
-                    try { console.warn("WS MESSAGE COULD NOT BE NORMALIZED:", parsed); } catch { /* ignore */ }
-                }
-            }
-        } catch (error) {
-            if (DEBUG) {
-                try { console.error("WS MESSAGE PARSE ERROR:", error, "Raw data:", msg.data); } catch { /* ignore */ }
-            }
-            notifyStatus("error");
-        }
+                } catch { /* ignore */ }
+            }, 25_000);
+        };
+
+        ws.onmessage = (msg: MessageEvent<string>) => {
+            if (typeof msg.data !== "string") return;
+            try {
+                const parsed: Incoming = JSON.parse(msg.data);
+                const evt = adaptIncoming(parsed);
+                if (window.__DEBUG_WS__) console.debug("[WS] IN:", parsed, "→", evt);
+                if (evt) subs.forEach((fn) => fn(evt));
+            } catch { /* ignore malformed frames */ }
+        };
+
+        ws.onerror = () => notifyStatus("error");
+
+        ws.onclose = () => {
+            if (heartbeatId !== null) { window.clearInterval(heartbeatId); heartbeatId = null; }
+            notifyStatus("closed");
+            if (stopped) return;
+            // Exponential backoff: cap at 30s to avoid overly long blackout periods.
+            const delay = Math.min(30_000, 1_000 * 2 ** attempts++);
+            window.setTimeout(open, delay);
+        };
     };
-    socket.onclose = () => {
-        notifyStatus("closed");
-        scheduleReconnect();
-    };
-    socket.onerror = () => {
-        notifyStatus("error");
-    };
+
+    open();
 }
 
-function scheduleReconnect() {
-    if (reconnectTimer != null) return;
-    if (!navigator.onLine) return; // wait for online
-    const delay = computeBackoffMs(reconnectAttempts++);
-    reconnectTimer = window.setTimeout(() => {
-        reconnectTimer = null;
-        ensureConnected();
-    }, delay) as unknown as number;
-}
-
-// React to network / visibility / auth token changes
-window.addEventListener("online", () => ensureConnected());
-window.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") ensureConnected();
-});
-window.addEventListener("storage", (e) => {
-    if (e.key === "accessToken") {
-        // Reconnect with the new token
-        try { socket?.close(); } catch { /* ignore */ }
-        socket = null;
-        ensureConnected();
-    }
-    if (e.key === "WS_DEBUG") {
-        DEBUG = localStorage.getItem("WS_DEBUG") === "1";
-    }
-});
-// Custom event fired by auth refresh flow
-window.addEventListener("auth:token-refreshed", () => {
-    try { socket?.close(); } catch { /* ignore */ }
-    socket = null;
-    ensureConnected();
-});
-
-// Initialize DEBUG flag on module load
-try { DEBUG = localStorage.getItem("WS_DEBUG") === "1"; } catch { /* ignore */ }
-
+/**
+ * Connect (or subscribe) to the task WebSocket.
+ * - Uses a relative base (default `/ws`) so dev proxy/gateway can route.
+ * - Includes userId and token query params for backend authorization.
+ * - Returns a handle with `close()` that removes this caller's subscriptions;
+ *   if no subscribers remain, the socket is closed.
+ */
 export function connectTaskWS(opts: Options = {}) {
-    // Register listeners only; ensure a single shared socket
-    if (opts.onEvent) eventListeners.add(opts.onEvent);
-    if (opts.onStatus) statusListeners.add(opts.onStatus);
-    // Push current status immediately
-    if (opts.onStatus) opts.onStatus(currentStatus);
-    // Ensure connection
-    ensureConnected();
+    const base = opts.baseUrl ?? (import.meta.env.VITE_WS_URL ?? "/ws");
+    const uid = opts.userId ?? readUserId();
+    const token = opts.token ?? localStorage.getItem("accessToken") ?? "";
+
+    const path = base.startsWith("/") ? base : `/${base}`;
+    const params = new URLSearchParams();
+    if (uid != null) params.set("userId", String(uid));
+    if (token) params.set("token", token);                // <-- always include
+    const url = `${path}?${params.toString()}`;
+
+    // Register status subscriber if provided (before attempting connect).
+    if (opts.onStatus) statusSubs.add(opts.onStatus);
+
+    // Ensure a socket to the computed URL is open (or connecting).
+    ensureOpen(url);
+
+    // Register event subscriber if provided.
+    if (opts.onEvent) subs.add(opts.onEvent);
+
+    // Clean shutdown on page unload (best-effort).
+    const onUnload = () => { try { ws?.close(); } catch { /* empty */ } };
+    window.addEventListener("beforeunload", onUnload);
 
     return {
         close() {
-            if (opts.onEvent) eventListeners.delete(opts.onEvent);
-            if (opts.onStatus) statusListeners.delete(opts.onStatus);
-            // Do not close the shared socket here
+            window.removeEventListener("beforeunload", onUnload);
+            if (opts.onEvent) subs.delete(opts.onEvent);
+            if (opts.onStatus) statusSubs.delete(opts.onStatus);
+
+            // If nobody is listening anymore, stop the socket and clear heartbeat.
+            if (subs.size === 0 && statusSubs.size === 0) {
+                stopped = true;
+                try { ws?.close(); } catch { /* empty */ }
+                ws = null;
+                if (heartbeatId !== null) { window.clearInterval(heartbeatId); heartbeatId = null; }
+            }
         },
     };
-}
-
-/** Small React hook to show status in the UI if you want */
-export function useWsStatus() {
-    const [status, setStatus] = useState<Status>("closed");
-    return { status, setStatus } as const;
 }

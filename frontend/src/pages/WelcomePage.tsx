@@ -1,9 +1,30 @@
+// Authenticated landing page ("dashboard-lite").
+// Purpose:
+// - Provide a quick at-a-glance overview: "My Tasks" and "My Teams"
+// - Encourage navigation into deeper flows (task detail, team board)
+//
+// Flow:
+// 1) Resolve currentUser from localStorage → derive userId
+// 2) In parallel, fetch:
+//    - Teams for this user (GET /team-api/teams?memberId=...)
+//    - Tasks for this user (GET /task-api/tasks/me or equivalent)
+// 3) Validate response shapes and render two simple lists
+//
+// Error handling:
+// - Shows a red inline error and keeps both lists empty (no crash)
+// - If no userId is present, prompts to log in again
+//
+// UX notes:
+// - Tasks: show title with a strike-through if completed, plus optional priority/due
+// - Teams: list names that link to the team-scoped board (/teams/:id)
+
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { listUserTeams, type Team } from "../api/team";
 import { listMyTasks, type Task } from "../api/task";
-import { connectTaskWS, type TaskEvent } from "../realtime/ws";
 
+// Read current user once from localStorage.
+// Returns null if missing or invalid to avoid throwing on JSON.parse.
 function useCurrentUserId(): number | null {
     return useMemo(() => {
         try {
@@ -17,97 +38,81 @@ function useCurrentUserId(): number | null {
     }, []);
 }
 
+// Runtime guard to coerce any unknown into an array (prevents `.map` crash).
+function toArray<T>(value: unknown): T[] {
+    return Array.isArray(value) ? (value as T[]) : [];
+}
+
 export default function WelcomePage() {
     const userId = useCurrentUserId();
 
+    // Local page state: data + UX flags
     const [teams, setTeams] = useState<Team[]>([]);
     const [tasks, setTasks] = useState<Task[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [wsStatus, setWsStatus] =
-        useState<"connecting" | "connected" | "closed" | "error">("closed");
 
-    // A) load teams + tasks (aggregate) once userId is known
     useEffect(() => {
-        let canceled = false;
+        let cancel = false;
 
         async function load() {
+            setError(null);
+            setLoading(true);
+
+            // Guard: without a resolved user, we cannot fetch personalized data
             if (!userId) {
                 setError("No authenticated user found. Please log in again.");
                 setLoading(false);
                 return;
             }
+
             try {
-                const [userTeams, myTasks] = await Promise.all([
+                // Fetch both panes concurrently for faster TTI
+                const [tms, tks] = await Promise.all([
                     listUserTeams(userId),
                     listMyTasks(),
                 ]);
-                if (canceled) return;
-                setTeams(userTeams);
-                setTasks(myTasks);
-            } catch {
-                if (!canceled) setError("Failed to load data. Check services and your token.");
+
+                if (cancel) return;
+
+                // Validate shapes to avoid `.map` on non-array responses
+                if (!Array.isArray(tms)) {
+                    throw new Error("Team API returned unexpected shape.");
+                }
+                if (!Array.isArray(tks)) {
+                    throw new Error("Task API returned unexpected shape.");
+                }
+
+                setTeams(toArray<Team>(tms));
+                setTasks(toArray<Task>(tks));
+            } catch (e) {
+                const msg = e instanceof Error
+                    ? e.message
+                    : "Failed to load data. Check services and your token.";
+                setError(msg);
+                // Stay resilient: show empty lists rather than breaking the page
+                setTeams([]);
+                setTasks([]);
             } finally {
-                if (!canceled) setLoading(false);
+                if (!cancel) setLoading(false);
             }
         }
 
         load();
         return () => {
-            canceled = true;
+            cancel = true;
         };
     }, [userId]);
 
-    // B) subscribe to realtime task events
-    useEffect(() => {
-        if (!userId) return;
-        const sub = connectTaskWS({
-            onStatus: setWsStatus,
-            onEvent: (evt: TaskEvent) => {
-                setTasks((prev) => {
-                    switch (evt.eventType) {
-                        case "task.deleted":
-                            return prev.filter((t) => t.id !== evt.taskId);
-                        case "task.created":
-                            return [
-                                {
-                                    id: evt.taskId,
-                                    teamId: evt.teamId,
-                                    title: String(evt.payload?.title ?? "New task"),
-                                    priority: evt.payload?.priority as Task["priority"],
-                                    due: evt.payload?.due as string | undefined,
-                                    assigneeId:
-                                        (evt.payload?.assigneeId as number | undefined) ??
-                                        (evt.assigneeId ?? undefined),
-                                    completed: false,
-                                },
-                                ...prev,
-                            ];
-                        case "task.updated":
-                        case "task.completed":
-                            return prev.map((t) =>
-                                t.id === evt.taskId ? { ...t, ...(evt.payload as object) } : t
-                            );
-                        default:
-                            return prev;
-                    }
-                });
-            },
-        });
-        return () => sub.close();
-    }, [userId]);
-
+    // Guarded renders for clarity
     if (loading) return <div>Loading…</div>;
     if (error) return <div style={{ color: "crimson" }}>{error}</div>;
 
     return (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, alignItems: "start" }}>
-            {/* Left: tasks */}
+            {/* Left pane: user's tasks */}
             <section>
-                <h2 style={{ marginBottom: 12 }}>
-                    My Tasks{" "}
-                    <span style={{ marginLeft: 8, fontSize: 12, color: "#6b7280" }}>{wsStatus}</span>
-                </h2>
+                <h2 style={{ marginBottom: 12 }}>My Tasks</h2>
                 {tasks.length === 0 ? (
                     <div style={{ padding: 12, color: "#6b7280" }}>You have no open tasks.</div>
                 ) : (
@@ -123,16 +128,21 @@ export default function WelcomePage() {
                                     background: "#fff",
                                 }}
                             >
-                                <Link to={`/tasks/${t.id}`} style={{ textDecoration: "none" }}>
+                                <Link
+                                    to={`/tasks/${t.id}`}
+                                    style={{ textDecoration: t.completed ? "line-through" : "none" }}
+                                >
                                     <strong>{t.title}</strong>
                                 </Link>
                                 {t.priority && (
                                     <span style={{ marginLeft: 8, fontSize: 12, color: "#6b7280" }}>
-                    [{t.priority}]
-                  </span>
+                                        [{t.priority}]
+                                    </span>
                                 )}
                                 {t.due && (
-                                    <span style={{ marginLeft: 8, fontSize: 12, color: "#6b7280" }}>due {t.due}</span>
+                                    <span style={{ marginLeft: 8, fontSize: 12, color: "#6b7280" }}>
+                                        due {t.due}
+                                    </span>
                                 )}
                             </li>
                         ))}
@@ -140,7 +150,7 @@ export default function WelcomePage() {
                 )}
             </section>
 
-            {/* Right: teams */}
+            {/* Right pane: user's teams */}
             <section>
                 <h2 style={{ marginBottom: 12 }}>My Teams</h2>
                 {teams.length === 0 ? (

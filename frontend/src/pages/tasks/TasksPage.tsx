@@ -1,165 +1,154 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { listMyTasks, type Task } from "../../api/task";
-import { connectTaskWS, type TaskEvent } from "../../realtime/ws";
-import { listUserTeams, type Team } from "../../api/team";
+// Cross-team task list for the current user with realtime updates,
+// quick toggle complete, and delete actions.
 
-function useCurrentUserId(): number | null {
-    return useMemo(() => {
-        try {
-            const raw = localStorage.getItem("currentUser");
-            if (!raw) return null;
-            const obj = JSON.parse(raw);
-            return typeof obj?.id === "number" ? obj.id : null;
-        } catch {
-            return null;
-        }
-    }, []);
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+    listMyTasks,  // GET /tasks
+    setCompleted, // POST /tasks/:id/complete
+    deleteTask,   // DELETE /tasks/:id
+    type Task,
+} from "../../api/task";
+import type { TaskEvent } from "../../realtime/ws";
+import { useRealtime } from "../../realtime/useRealtime";
+import { patchFromEventPayload } from "../../realtime/eventPatch";
+
+// Normalize unknown → string
+function errorMessage(e: unknown): string {
+    return e instanceof Error ? e.message : String(e);
 }
 
 export default function TasksPage() {
-    const userId = useCurrentUserId();
+    // Local state for tasks and request flags
     const [tasks, setTasks] = useState<Task[]>([]);
-    const [teams, setTeams] = useState<Team[]>([]);
     const [loading, setLoading] = useState(true);
-    const [q, setQ] = useState("");
+    const [error, setError] = useState<string | null>(null);
 
+    // Initial load of "my tasks"
     useEffect(() => {
-        let canceled = false;
-        async function load() {
-            if (!userId) { setLoading(false); return; }
+        (async () => {
             try {
-                const [all, myTeams] = await Promise.all([listMyTasks(), listUserTeams(userId)]);
-                if (canceled) return;
-                setTasks(all);
-                setTeams(myTeams);
+                setLoading(true);
+                setTasks(await listMyTasks());
+            } catch (e: unknown) {
+                setError(errorMessage(e) || "Failed to load tasks.");
             } finally {
-                if (!canceled) setLoading(false);
+                setLoading(false);
             }
-        }
-        load();
-        return () => { canceled = true; };
-    }, [userId]);
-
-    // Subscribe to realtime updates globally, filter to tasks the user can see
-    useEffect(() => {
-        const sub = connectTaskWS({
-            onEvent: (evt: TaskEvent) => {
-                console.log(`[TasksPage] Processing ${evt.eventType} for task ${evt.taskId}`);
-                setTasks((prev) => {
-                    switch (evt.eventType) {
-                        case "task.deleted":
-                            return prev.filter((t) => t.id !== evt.taskId);
-                        case "task.created":
-                            // Only add if task doesn't already exist
-                            if (prev.find((t) => t.id === evt.taskId)) {
-                                return prev; // Task already exists, don't duplicate
-                            }
-                            return [
-                                {
-                                    id: evt.taskId,
-                                    teamId: evt.teamId,
-                                    title: String(evt.payload?.title ?? "New task"),
-                                    description: evt.payload?.description as string | undefined,
-                                    priority: evt.payload?.priority as Task["priority"],
-                                    due: evt.payload?.due as string | undefined,
-                                    assigneeId:
-                                        (evt.payload?.assigneeId as number | undefined) ??
-                                        (evt.assigneeId ?? undefined),
-                                    completed: Boolean(evt.payload?.completed ?? false),
-                                },
-                                ...prev
-                            ];
-                        case "task.updated":
-                        case "task.completed":
-                            return prev.map((t) => {
-                                if (t.id === evt.taskId) {
-                                    const payload = evt.payload as any || {};
-                                    return {
-                                        ...t,
-                                        title: typeof payload.title === 'string' ? payload.title : t.title,
-                                        description: typeof payload.description === 'string' ? payload.description : 
-                                                   payload.description === undefined ? t.description : payload.description,
-                                        priority: (payload.priority === 'low' || payload.priority === 'medium' || payload.priority === 'high') 
-                                                 ? payload.priority : t.priority,
-                                        due: typeof payload.due === 'string' ? payload.due : t.due,
-                                        completed: typeof payload.completed === 'boolean' ? payload.completed : t.completed,
-                                        assigneeId: typeof payload.assigneeId === 'number' ? payload.assigneeId : 
-                                                   payload.assigneeId === null ? undefined : t.assigneeId,
-                                    } as Task;
-                                }
-                                return t;
-                            });
-                        default:
-                            return prev;
-                    }
-                });
-            },
-        });
-        return () => sub.close();
+        })();
     }, []);
 
-    const byTeamName = useMemo(() => {
-        const map = new Map<number, string>();
-        for (const t of teams) map.set(t.id, t.name);
-        return map;
-    }, [teams]);
+    // Realtime updates: create/update/complete/delete
+    useRealtime(
+        (evt: TaskEvent) => {
+            const patch = patchFromEventPayload(evt); // Partial<Task>
+            setTasks((prev) => {
+                switch (evt.eventType) {
+                    case "task.created":
+                        // Prepend only if not already present
+                        if (prev.some((t) => t.id === evt.taskId)) return prev;
+                        return [
+                            {
+                                id: evt.taskId,
+                                teamId: evt.teamId,
+                                title: patch.title ?? "New task",
+                                completed: Boolean(patch.completed),
+                                ...patch,
+                            } as Task,
+                            ...prev,
+                        ];
+                    case "task.updated":
+                    case "task.completed":
+                        return prev.map((t) => (t.id === evt.taskId ? ({ ...t, ...patch } as Task) : t));
+                    case "task.deleted":
+                        return prev.filter((t) => t.id !== evt.taskId);
+                    default:
+                        return prev;
+                }
+            });
+        },
+        { throttleMs: 120 }
+    );
 
-    const filtered = useMemo(() => {
-        const term = q.trim().toLowerCase();
-        if (!term) return tasks;
-        return tasks.filter(t =>
-            t.title.toLowerCase().includes(term) ||
-            (t.description ?? "").toLowerCase().includes(term)
-        );
-    }, [tasks, q]);
+    // Toggle completion (optimistic update)
+    async function toggleComplete(t: Task) {
+        try {
+            await setCompleted(t.id, !t.completed);
+            setTasks((prev) => prev.map((x) => (x.id === t.id ? { ...x, completed: !x.completed } : x)));
+        } catch (e: unknown) {
+            setError(errorMessage(e) || "Failed to update status.");
+        }
+    }
 
+    // Delete with confirmation
+    async function remove(t: Task) {
+        if (!confirm("Delete this task?")) return;
+        try {
+            await deleteTask(t.id);
+            setTasks((prev) => prev.filter((x) => x.id !== t.id));
+        } catch (e: unknown) {
+            setError(errorMessage(e) || "Failed to delete task.");
+        }
+    }
+
+    // Guards
     if (loading) return <div>Loading…</div>;
+    if (error) return <div style={{ color: "crimson" }}>{error}</div>;
 
+    // UI list
     return (
-        <section style={{ maxWidth: 900, margin: "0 auto" }}>
-            <h1 style={{ marginBottom: 12 }}>My Tasks</h1>
-
-            <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
-                <input
-                    placeholder="Search title/description…"
-                    value={q}
-                    onChange={(e) => setQ(e.target.value)}
-                    style={{ flex: 1, padding: 8 }}
-                />
-                <Link to="/teams" style={{ alignSelf: "center" }}>Create task (go to team)</Link>
-            </div>
-
-            {filtered.length === 0 ? (
-                <div style={{ padding: 12, color: "#6b7280" }}>
-                    You have no tasks. Create one from a team page.
-                </div>
+        <div>
+            <h2 style={{ marginBottom: 12 }}>My Tasks</h2>
+            {tasks.length === 0 ? (
+                <div style={{ padding: 12, color: "#6b7280" }}>No tasks.</div>
             ) : (
-                <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-                    {filtered.map((t) => (
+                <ul style={{ listStyle: "none", padding: 0 }}>
+                    {tasks.map((t) => (
                         <li
                             key={t.id}
                             style={{
-                                padding: "10px 12px",
+                                display: "grid",
+                                gridTemplateColumns: "1fr auto auto",
+                                alignItems: "center",
+                                gap: 8,
                                 border: "1px solid #e5e7eb",
                                 borderRadius: 8,
-                                marginBottom: 10,
-                                background: "#fff",
+                                padding: "8px 10px",
+                                marginBottom: 8,
                             }}
                         >
-                            <Link to={`/tasks/${t.id}`} style={{ textDecoration: "none" }}>
-                                <strong>{t.title}</strong>
+                            {/* Click title to open full editor */}
+                            <Link to={`/tasks/${t.id}`} style={{ textDecoration: t.completed ? "line-through" : "none" }}>
+                                {t.title}
                             </Link>
-                            <span style={{ marginLeft: 8, fontSize: 12, color: "#6b7280" }}>
-                {t.priority ? `[${t.priority}]` : ""} {t.due ? `due ${t.due}` : ""}
-              </span>
-                            <div style={{ fontSize: 12, color: "#6b7280" }}>
-                                Team: {byTeamName.get(t.teamId) ?? `#${t.teamId}`}
-                            </div>
+                            <button onClick={() => toggleComplete(t)} style={btnSecondary}>
+                                {t.completed ? "Mark Open" : "Mark Done"}
+                            </button>
+                            <button onClick={() => remove(t)} style={btnDanger}>
+                                Delete
+                            </button>
                         </li>
                     ))}
                 </ul>
             )}
-        </section>
+        </div>
     );
 }
+
+// Button styles
+const btnSecondary: React.CSSProperties = {
+    padding: "6px 10px",
+    borderRadius: 8,
+    border: "1px solid #d1d5db",
+    background: "#f9fafb",
+    cursor: "pointer",
+};
+
+const btnDanger: React.CSSProperties = {
+    padding: "6px 10px",
+    borderRadius: 8,
+    border: "1px solid #dc2626",
+    background: "#fee2e2",
+    color: "#991b1b",
+    cursor: "pointer",
+};
