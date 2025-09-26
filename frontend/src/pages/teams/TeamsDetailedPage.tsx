@@ -1,289 +1,275 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
-import { getTeamById, listTeamMembers, type TeamMember } from "../../api/team";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import {
-    listTasksForTeam,
-    createTaskInTeam,
-    setCompleted,
-    deleteTask,
-    type Task,
-} from "../../api/task";
-import { type TaskEvent } from "../../realtime/ws";
-import {useRealtime} from "../../realtime/useRealtime";
-import {patchFromEventPayload} from "../../realtime/eventPatch";
+    getTeamById,
+    listTeamMembers,
+    inviteByUsername,
+    removeMember,
+    updateTeam,
+    deleteTeam,
+    type Team,
+    type TeamMember,
+    type TeamPatch,
+} from "../../api/team";
 
-
-type NewTaskForm = {
-    title: string;
-    description?: string;
-    priority: "low" | "medium" | "high";
-    due: string;
-    assigneeId?: number;
+type State = {
+    team: Team | null;
+    members: TeamMember[];
+    loading: boolean;
+    saving: boolean;
+    error: string | null;
 };
 
-export default function TeamDetailsPage() {
-    const { id } = useParams<{ id: string }>();
+export default function TeamsDetailedPage() {
+    const { id } = useParams();
     const teamId = Number(id);
+    const navigate = useNavigate();
 
-    const [teamName, setTeamName] = useState("");
-    const [members, setMembers] = useState<TeamMember[]>([]);
-    const [tasks, setTasks] = useState<Task[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [creating, setCreating] = useState(false);
-
-    const [form, setForm] = useState<NewTaskForm>({
-        title: "",
-        description: "",
-        priority: "medium",
-        due: "",
-        assigneeId: undefined,
+    const [state, setState] = useState<State>({
+        team: null,
+        members: [],
+        loading: true,
+        saving: false,
+        error: null,
     });
 
-    // map for quick name lookup
-    const memberNameById = useMemo(() => {
-        const m = new Map<number, string>();
-        members.forEach((u) => m.set(u.id, u.username));
-        return m;
-    }, [members]);
+    const [form, setForm] = useState<TeamPatch>({ name: "", description: "" });
+    const [inviteName, setInviteName] = useState("");
+    const dirty = useMemo(
+        () =>
+            state.team
+                ? (form.name ?? "") !== (state.team.name ?? "") ||
+                (form.description ?? "") !== (state.team.description ?? "")
+                : false,
+        [form, state.team]
+    );
 
-    // Initial load (team, tasks, members)
     useEffect(() => {
         let cancel = false;
-        async function load() {
+        (async () => {
             try {
-                const [team, ts, ms] = await Promise.all([
+                setState((s) => ({ ...s, loading: true, error: null }));
+                const [t, ms] = await Promise.all([
                     getTeamById(teamId),
-                    listTasksForTeam(teamId),
                     listTeamMembers(teamId),
                 ]);
                 if (cancel) return;
-                setTeamName(team.name);
-                setTasks(ts);
-                setMembers(ms);
-            } finally {
-                if (!cancel) setLoading(false);
+                setState({ team: t, members: ms, loading: false, saving: false, error: null });
+                setForm({ name: t.name, description: t.description ?? "" });
+            } catch (e) {
+                setState((s) => ({
+                    ...s,
+                    loading: false,
+                    error: e instanceof Error ? e.message : String(e),
+                }));
             }
-        }
-        if (Number.isFinite(teamId)) load();
-        else setLoading(false);
+        })();
         return () => {
             cancel = true;
         };
     }, [teamId]);
 
-    useRealtime((evt: TaskEvent) => {
-        if (evt.teamId !== teamId) return;
-
-        const patch = patchFromEventPayload(evt);
-
-        setTasks(prev => {
-            switch (evt.eventType) {
-                case "task.created": {
-                    if (prev.some(t => t.id === evt.taskId)) return prev;
-                    const next = {
-                        id: evt.taskId,
-                        teamId: evt.teamId,
-                        title: patch.title ?? "New task",
-                        description: patch.description,
-                        priority: patch.priority,
-                        due: patch.due,
-                        assigneeId: patch.assigneeId,
-                        completed: Boolean(patch.completed ?? false),
-                    };
-                    return [next, ...prev];
-                }
-
-                case "task.updated":
-                case "task.completed":
-                    return prev.map(t => (t.id === evt.taskId ? { ...t, ...patch } : t));
-
-                case "task.deleted":
-                    return prev.filter(t => t.id !== evt.taskId);
-
-                default:
-                    return prev;
-            }
-        });
-    }, { throttleMs: 100 });
-
-
-    async function onCreate(e: React.FormEvent) {
+    async function onSaveTeam(e: React.FormEvent) {
         e.preventDefault();
-        if (!form.title.trim()) {
-            alert("Title is required.");
-            return;
-        }
-        setCreating(true);
+        if (!state.team || !dirty) return;
         try {
-            const created = await createTaskInTeam(teamId, {
-                title: form.title.trim(),
-                description: form.description?.trim() || undefined,
-                priority: form.priority,
-                due: form.due || new Date().toISOString().slice(0, 10),
-                assigneeId: form.assigneeId,
+            setState((s) => ({ ...s, saving: true, error: null }));
+            const updated = await updateTeam(state.team.id, {
+                name: form.name?.trim() || state.team.name,
+                description: form.description?.trim() || "",
             });
-            setTasks((prev) => [created, ...prev]);
-            setForm((f) => ({ ...f, title: "", description: "" }));
-        } catch {
-            alert("Failed to create task.");
-        } finally {
-            setCreating(false);
+            setState((s) => ({ ...s, team: updated, saving: false }));
+        } catch (e) {
+            setState((s) => ({
+                ...s,
+                saving: false,
+                error: e instanceof Error ? e.message : String(e),
+            }));
         }
     }
 
-    async function toggleComplete(t: Task) {
+    async function onInvite(e: React.FormEvent) {
+        e.preventDefault();
+        if (!inviteName.trim() || !state.team) return;
         try {
-            const updated = await setCompleted(t.id, !t.completed);
-            setTasks((prev) => prev.map((x) => (x.id === t.id ? updated : x)));
-        } catch {
-            alert("Failed to update completion.");
+            setState((s) => ({ ...s, saving: true, error: null }));
+            await inviteByUsername(state.team.id, inviteName.trim(), "MEMBER");
+            const ms = await listTeamMembers(state.team.id);
+            setState((s) => ({ ...s, members: ms, saving: false }));
+            setInviteName("");
+        } catch (e) {
+            setState((s) => ({
+                ...s,
+                saving: false,
+                error: e instanceof Error ? e.message : String(e),
+            }));
         }
     }
 
-    async function remove(t: Task) {
-        if (!confirm("Delete this task?")) return;
+    async function onRemoveMember(userId: number) {
+        if (!state.team) return;
+        if (!confirm("Remove this member from the team?")) return;
         try {
-            await deleteTask(t.id);
-            setTasks((prev) => prev.filter((x) => x.id !== t.id));
-        } catch {
-            alert("Delete failed.");
+            setState((s) => ({ ...s, saving: true, error: null }));
+            await removeMember(state.team.id, userId);
+            setState((s) => ({
+                ...s,
+                members: s.members.filter((m) => m.id !== userId),
+                saving: false,
+            }));
+        } catch (e) {
+            setState((s) => ({
+                ...s,
+                saving: false,
+                error: e instanceof Error ? e.message : String(e),
+            }));
         }
     }
 
-    if (loading) return <div>Loading…</div>;
+    async function onDeleteTeam() {
+        if (!state.team) return;
+        if (!confirm("Delete this team? This cannot be undone.")) return;
+        try {
+            setState((s) => ({ ...s, saving: true, error: null }));
+            await deleteTeam(state.team.id);
+            navigate("/teams", { replace: true });
+        } catch (e) {
+            setState((s) => ({
+                ...s,
+                saving: false,
+                error: e instanceof Error ? e.message : String(e),
+            }));
+        }
+    }
+
+    if (state.loading) return <div>Loading…</div>;
+    if (state.error) return <div style={{ color: "crimson" }}>{state.error}</div>;
+    if (!state.team) return null;
 
     return (
-        <section style={{ maxWidth: 1000, margin: "0 auto" }}>
-            <h1 style={{ marginBottom: 12 }}>
-                Team: {teamName || `#${teamId}`}{" "}
-            </h1>
+        <div style={{ maxWidth: 760 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+                <h2 style={{ margin: 0 }}>Team #{state.team.id}</h2>
+                <Link to="/teams">Back to Teams</Link>
+                <div style={{ marginLeft: "auto" }}>
+                    <button onClick={onDeleteTeam} style={btnDanger} disabled={state.saving}>
+                        Delete team
+                    </button>
+                </div>
+            </div>
 
-            {/* Create task */}
-            <form
-                onSubmit={onCreate}
-                style={{
-                    display: "grid",
-                    gridTemplateColumns: "2fr 3fr 1fr 1fr 1fr auto",
-                    gap: 8,
-                    alignItems: "end",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 8,
-                    padding: 12,
-                    marginBottom: 16,
-                    background: "#fff",
-                }}
-            >
-                <label style={{ display: "grid", gap: 4 }}>
-                    <span style={{ fontSize: 12, color: "#6b7280" }}>Title*</span>
+            {/* Edit team */}
+            <form onSubmit={onSaveTeam} style={{ display: "grid", gap: 12, marginBottom: 20 }}>
+                <label style={{ display: "grid", gap: 6 }}>
+                    <span>Name</span>
                     <input
+                        value={form.name ?? ""}
+                        onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                         required
-                        value={form.title}
-                        onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                        placeholder="e.g. Write release notes"
+                        style={input}
                     />
                 </label>
-
-                <label style={{ display: "grid", gap: 4 }}>
-                    <span style={{ fontSize: 12, color: "#6b7280" }}>Description</span>
-                    <input
-                        value={form.description}
+                <label style={{ display: "grid", gap: 6 }}>
+                    <span>Description</span>
+                    <textarea
+                        rows={3}
+                        value={form.description ?? ""}
                         onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                        placeholder="optional"
+                        style={textarea}
                     />
                 </label>
+                <div>
+                    <button type="submit" disabled={!dirty || state.saving} style={btnPrimary}>
+                        {state.saving ? "Saving…" : "Save changes"}
+                    </button>
+                </div>
+            </form>
 
-                <label style={{ display: "grid", gap: 4 }}>
-                    <span style={{ fontSize: 12, color: "#6b7280" }}>Priority</span>
-                    <select
-                        value={form.priority}
-                        onChange={(e) =>
-                            setForm((f) => ({ ...f, priority: e.target.value as NewTaskForm["priority"] }))
-                        }
-                    >
-                        <option value="low">low</option>
-                        <option value="medium">medium</option>
-                        <option value="high">high</option>
-                    </select>
-                </label>
-
-                <label style={{ display: "grid", gap: 4 }}>
-                    <span style={{ fontSize: 12, color: "#6b7280" }}>Due</span>
-                    <input
-                        type="date"
-                        value={form.due}
-                        onChange={(e) => setForm((f) => ({ ...f, due: e.target.value }))}
-                    />
-                </label>
-
-                {/* Assignee: dropdown of team members */}
-                <label style={{ display: "grid", gap: 4 }}>
-                    <span style={{ fontSize: 12, color: "#6b7280" }}>Assignee</span>
-                    <select
-                        value={form.assigneeId ?? ""}
-                        onChange={(e) =>
-                            setForm((f) => ({
-                                ...f,
-                                assigneeId: e.target.value === "" ? undefined : Number(e.target.value),
-                            }))
-                        }
-                    >
-                        <option value="">Unassigned</option>
-                        {members.map((m) => (
-                            <option key={m.id} value={m.id}>
-                                {m.username} ({m.role})
-                            </option>
-                        ))}
-                    </select>
-                </label>
-
-                <button type="submit" disabled={creating} style={{ height: 36 }}>
-                    {creating ? "Creating…" : "Add Task"}
+            {/* Invite */}
+            <form onSubmit={onInvite} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 20 }}>
+                <strong>Invite by username:</strong>
+                <input
+                    value={inviteName}
+                    onChange={(e) => setInviteName(e.target.value)}
+                    placeholder="e.g. alice"
+                    style={{ ...input, maxWidth: 240 }}
+                />
+                <button type="submit" disabled={!inviteName.trim() || state.saving} style={btnSecondary}>
+                    Invite
                 </button>
             </form>
 
-            {/* Tasks list */}
-            {tasks.length === 0 ? (
-                <div style={{ color: "#6b7280" }}>No tasks in this team yet.</div>
-            ) : (
-                <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-                    {tasks.map((t) => (
-                        <li
-                            key={t.id}
-                            style={{
-                                padding: "10px 12px",
-                                border: "1px solid #e5e7eb",
-                                borderRadius: 8,
-                                marginBottom: 10,
-                                background: "#fff",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 12,
-                            }}
-                        >
-                            <div style={{ flex: 1 }}>
-                                <div>
-                                    <strong>{t.title}</strong>{" "}
-                                    <span style={{ fontSize: 12, color: "#6b7280" }}>
-                    {t.priority ? `[${t.priority}]` : ""}{" "}
-                                        {t.due ? `• due ${t.due}` : ""}{" "}
-                                        {t.assigneeId ? `• @${memberNameById.get(t.assigneeId)}` : ""}
-                  </span>
+            {/* Members */}
+            <div style={{ marginTop: 8 }}>
+                <h3 style={{ margin: "8px 0" }}>Members</h3>
+                {state.members.length === 0 ? (
+                    <div style={{ color: "#6b7280" }}>No members yet.</div>
+                ) : (
+                    <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                        {state.members.map((m) => (
+                            <li
+                                key={m.id}
+                                style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 8,
+                                    padding: "8px 10px",
+                                    border: "1px solid #e5e7eb",
+                                    borderRadius: 8,
+                                    marginBottom: 8,
+                                }}
+                            >
+                                <div style={{ flex: 1 }}>
+                                    <strong>{m.username}</strong>{" "}
+                                    <span style={{ color: "#6b7280" }}>({m.role})</span>
                                 </div>
-                                {t.description ? (
-                                    <div style={{ fontSize: 12, color: "#6b7280" }}>{t.description}</div>
-                                ) : null}
-                            </div>
-
-                            <button onClick={() => toggleComplete(t)}>
-                                {t.completed ? "Mark not completed" : "Mark completed"}
-                            </button>
-                            <button onClick={() => remove(t)} style={{ color: "crimson" }}>
-                                Delete
-                            </button>
-                        </li>
-                    ))}
-                </ul>
-            )}
-        </section>
+                                <button onClick={() => onRemoveMember(m.id)} style={btnLight} disabled={state.saving}>
+                                    Remove
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
+        </div>
     );
 }
+
+const input: React.CSSProperties = {
+    border: "1px solid #e5e7eb",
+    borderRadius: 8,
+    padding: "8px 10px",
+    background: "#fff",
+};
+const textarea: React.CSSProperties = { ...input, resize: "vertical" };
+const btnPrimary: React.CSSProperties = {
+    padding: "8px 12px",
+    borderRadius: 8,
+    border: "1px solid #2563eb",
+    background: "#2563eb",
+    color: "white",
+    cursor: "pointer",
+};
+const btnSecondary: React.CSSProperties = {
+    padding: "8px 12px",
+    borderRadius: 8,
+    border: "1px solid #d1d5db",
+    background: "#f9fafb",
+    color: "#111827",
+    cursor: "pointer",
+};
+const btnLight: React.CSSProperties = {
+    padding: "6px 10px",
+    borderRadius: 8,
+    border: "1px solid #e5e7eb",
+    background: "#f3f4f6",
+    cursor: "pointer",
+};
+const btnDanger: React.CSSProperties = {
+    padding: "8px 12px",
+    borderRadius: 8,
+    border: "1px solid #dc2626",
+    background: "#fee2e2",
+    color: "#991b1b",
+    cursor: "pointer",
+};

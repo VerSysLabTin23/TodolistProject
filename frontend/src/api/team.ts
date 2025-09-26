@@ -102,3 +102,18 @@ export async function adminSetMemberRole(teamId: number, userId: number, role: T
     });
     return res.json() as Promise<TeamMember>;
 }
+export async function updateTeam(teamId: number, patch: TeamPatch): Promise<Team> {
+    // same endpoint you already use for adminUpdateTeam; non-admin owners can use it too
+    const res = await authFetch(`/api/teams/teams/${teamId}`, {
+        method: "PUT",
+        body: JSON.stringify(patch),
+    });
+    return res.json() as Promise<Team>;
+}
+
+export async function deleteTeam(teamId: number): Promise<void> {
+    await authFetch(`/api/teams/teams/${teamId}`, { method: "DELETE" });
+}
+
+// Optional friendly aliases reusing what you already have:
+export const removeMember = adminRemoveMember;
