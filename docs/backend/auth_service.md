@@ -4,6 +4,8 @@
 The **Auth Service** handles user authentication, JWT token management, and user profile operations.  
 It provides JWT validation for other services and manages user data with secure password hashing.
 
+- Auth service API doc: [Auth API](../../auth/api/auth.yml)
+
 ## Architecture
 - **Port**: `8084`  
 - **Database**: MySQL (`3309`)  

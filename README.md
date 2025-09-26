@@ -8,7 +8,10 @@
 
 ## Overview
 
-A distributed, real-time collaborative Todo application built with microservices architecture. Features include team-based task management, real-time updates via WebSocket, and event-driven communication using Apache Kafka.
+A distributed, real-time collaborative Todo application built with microservices architecture. Features include team-based task management, real-time updates via WebSocket, and event-driven communication using Apache Kafka.  
+
+All documentation is available in the `docs/` folder of the repository.  
+Cheeck the documentation in github pages https://versyslabtin23.github.io/TodolistProject/
 
 ## Architecture
 

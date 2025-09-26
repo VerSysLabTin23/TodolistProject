@@ -38,6 +38,6 @@ It handles load balancing, WebSocket proxying, static file serving, and request 
 
 ## Key Files
 - **Configuration**: `nginx.conf`
+- **Docker Config**: `docker-compose.yml` (nginx service)  
 
 \newpage  
-- **Docker Config**: `docker-compose.yml` (nginx service)  

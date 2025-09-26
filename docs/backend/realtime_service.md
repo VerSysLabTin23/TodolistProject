@@ -36,8 +36,8 @@ Broadcasts events to specific users based on:
 
 ## Key Files
 - **Main Entry**: `realtime/main.go`  
-- **WebSocket Hub**: `realtime/websocket.go`
-
-\newpage  
+- **WebSocket Hub**: `realtime/websocket.go` 
 - **Kafka Consumer**: `realtime/kafka_consumer.go`  
 - **Events**: `realtime/events.go`  
+
+\newpage 

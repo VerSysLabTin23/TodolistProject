@@ -9,12 +9,14 @@
 **Solution**  
 This project is a distributed Todo application system designed with a microservices architecture.  
 The initial design followed a pure microservices approach, but later—due to requirements from another course (Verteilte Systeme)—we extended the system with Apache Kafka.
-This addition introduced an event-driven component, adopting an event-driven architecture pattern where Apache Kafka serves as the message middleware to enable asynchronous communication between services.
+This addition introduced an event-driven component, where Apache Kafka serves as the message middleware to enable asynchronous communication between the backend core business services (task,team,auth services), realtime service and notification service. 
+Kafka was implemented after the development of core business services. So it doesn't support the communication between the three core business services. Those three core business services still communicate with API request.
+
 
 **Core Architecture Features:**  
 Microservices Architecture: Decomposed monolithic application into independent services (Auth, Team, Task, Realtime, Notification)  
-Event-Driven: Using Kafka for loose coupling between services  
-Real-time Communication: Providing real-time updates through WebSocket  
+Event-Driven: Using Kafka for loose coupling between (some) services  
+Real-time Communication: Providing real-time updates through WebSocket 
 Containerized Deployment: Using Docker and Docker Compose for service orchestration  
 Load Balancing: Implementing API gateway and load balancing through Nginx
 
@@ -22,7 +24,7 @@ Load Balancing: Implementing API gateway and load balancing through Nginx
 - Microservices: Independent services (Auth, Team, Task, Realtime, Notification) for scalability and maintainability.
 - Kafka: High-throughput message broker for event streaming and persistence.
 - WebSocket: Real-time bidirectional communication for collaborative features.
-- Database per Service: Data isolation and independent scaling.
+- Seperate Database: Data isolation and independent scaling.
 
 #### Original Architecture
 ![Original Architecture](img/architecture_old.png)

@@ -4,6 +4,8 @@
 The **Team Service** handles team management operations including team CRUD, member management, and permission control.  
 It provides internal APIs for other services to validate team access and publishes team-related events to **Kafka**.
 
+- Team service API doc: [Team API](../../team/api/team.yml)
+
 ## Architecture
 - **Port**: `8083`  
 - **Database**: MySQL (`3307`)  
