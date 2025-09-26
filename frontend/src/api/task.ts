@@ -22,87 +22,58 @@ export type CreateTaskInput = {
     assigneeId?: number | null;
 };
 
-// ---------- helpers -------------------------------------------------
-
+/* ---------- helpers (unchanged) ---------- */
 type UnknownRecord = Record<string, unknown>;
-
 function isTaskLike(x: unknown): x is Task {
     if (!x || typeof x !== "object") return false;
     const r = x as UnknownRecord;
-    return typeof r["id"] === "number" &&
-        typeof r["teamId"] === "number" &&
-        typeof r["title"] === "string";
+    return typeof r["id"] === "number" && typeof r["teamId"] === "number" && typeof r["title"] === "string";
 }
-
-function isTaskArray(x: unknown): x is Task[] {
-    return Array.isArray(x) && x.every(isTaskLike);
-}
-
+function isTaskArray(x: unknown): x is Task[] { return Array.isArray(x) && x.every(isTaskLike); }
 function pickArrayKey(obj: unknown, key: string): Task[] | null {
     if (!obj || typeof obj !== "object") return null;
     const v = (obj as UnknownRecord)[key];
     return isTaskArray(v) ? v : null;
 }
-
-function looksLikeHtml(payload: unknown): boolean {
-    return typeof payload === "string" && /<!DOCTYPE html|<html/i.test(payload);
-}
-
+function looksLikeHtml(payload: unknown): boolean { return typeof payload === "string" && /<!DOCTYPE html|<html/i.test(payload); }
 function unwrapList(payload: unknown): Task[] {
     if (isTaskArray(payload)) return payload;
-
-    const fromTasks = pickArrayKey(payload, "tasks");
-    if (fromTasks) return fromTasks;
-
-    const fromData = pickArrayKey(payload, "data");
-    if (fromData) return fromData;
-
-    const fromItems = pickArrayKey(payload, "items");
-    if (fromItems) return fromItems;
-
-    if (looksLikeHtml(payload)) {
-        throw new Error(
-            "Task API returned HTML (proxy fallback) – your request hit the SPA instead of the API. Check the request path and Nginx routes."
-        );
-    }
+    const t = pickArrayKey(payload, "tasks"); if (t) return t;
+    const d = pickArrayKey(payload, "data");  if (d) return d;
+    const i = pickArrayKey(payload, "items"); if (i) return i;
+    if (looksLikeHtml(payload)) throw new Error("Task API returned HTML (proxy fallback) – your request hit the SPA instead of the API. Check the request path and Nginx routes.");
     throw new Error("Task API returned unexpected shape.");
 }
 
-// ---------- Lists ---------------------------------------------------
+/* ---------- Lists ---------- */
 
-// Cross-team “my tasks”  → GET /api/tasks
+// Cross-team “my tasks” → GET /api/tasks
 export async function listMyTasks(): Promise<Task[]> {
-    const { data } = await http.get("/api/tasks/"); // note the trailing slash
+    const { data } = await http.get("/tasks");        // baseURL '/api' → '/api/tasks'
     return unwrapList(data);
 }
 
 // Team tasks → GET /api/tasks/teams/:teamId/tasks
 export async function listTasksForTeam(teamId: number): Promise<Task[]> {
-    const { data } = await http.get(`/teams/${teamId}/tasks`); // <-- no extra /api
+    const { data } = await http.get(`/tasks/teams/${teamId}/tasks`);
     return unwrapList(data);
 }
 
-// ---------- Create --------------------------------------------------
+/* ---------- Create ---------- */
 
-export async function createTaskInTeam(
-    teamId: number,
-    input: CreateTaskInput
-): Promise<Task> {
-    const { data } = await http.post<Task>(`/teams/${teamId}/tasks`, input);
+export async function createTaskInTeam(teamId: number, input: CreateTaskInput): Promise<Task> {
+    const { data } = await http.post<Task>(`/tasks/teams/${teamId}/tasks`, input);
     return data;
 }
 
-// ---------- Single task --------------------------------------------
+/* ---------- Single task ---------- */
 
 export async function getTask(id: number): Promise<Task> {
     const { data } = await http.get<Task>(`/tasks/${id}`);
     return data;
 }
 
-export async function updateTask(
-    id: number,
-    patch: Partial<CreateTaskInput> & { completed?: boolean }
-): Promise<Task> {
+export async function updateTask(id: number, patch: Partial<CreateTaskInput> & { completed?: boolean }): Promise<Task> {
     const { data } = await http.put<Task>(`/tasks/${id}`, patch);
     return data;
 }
