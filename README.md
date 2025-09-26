@@ -1,25 +1,32 @@
-# TodolistProject
-DHBW Heidenheim INF2023 Semester 4 Verteilte System Lab Project
+# Todo List Project
 
-Team member: Ziyi Hong, Danylo Tulainov
+**DHBW Heidenheim INF2023 Semester 4 - Distributed Systems Lab Project**
 
----
-## 1. Architecture:
-![Project architecture diagram](docs/img/architecture_new.png)
+**Team Members**: Ziyi Hong, Danylo Tulainov
 
 ---
-## 2. Branching strategy: 
+
+## Overview
+
+A distributed, real-time collaborative Todo application built with microservices architecture. Features include team-based task management, real-time updates via WebSocket, and event-driven communication using Apache Kafka.
+
+## Architecture
+
+![Project New Architecture Diagram](docs/img/architecture_new.png)
+
+## Branching strategy: 
 [Check here](docs/branching.md)
 
-## 3. Docs:
-[Backend](docs/README.md)
+## Docs:
+Find all the documentation in docs/
+
+- [Setup Guide](docs/setup.md) - Detailed setup instructions
+- [Overview for the whole documentation](docs/overview.md)
+- [Backend](docs/backend/backend_overview.md) - Backend related documentation
+- [frontend](docs/frontend/frontend_overview.md) - Frontend related documentation
 
 ---
-## 4. Quick Start:
-
-### Prerequisites
-- Docker and Docker Compose
-- Go 1.21+ (for local development)
+## Quick Start:
 
 ### Starting Services
 ```bash
@@ -32,11 +39,3 @@ docker compose logs -f
 # Stop all services
 docker compose down
 ```
-
-### Service URLs
-- **Auth Service**: http://localhost:8084
-- **Team Service**: http://localhost:8082  
-- **Task Service**: http://localhost:8081
-- **Auth Database**: http://localhost:8085 (phpMyAdmin)
-- **Team Database**: http://localhost:8086 (phpMyAdmin)
-- **Task Database**: http://localhost:8087 (phpMyAdmin)

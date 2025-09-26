@@ -14,6 +14,11 @@ This document lists all current HTTP endpoints across the Auth, Team, and Task s
   - GET /healthz
     - curl: `curl -sS http://localhost:8084/healthz`
 
+- Internal endpoints
+  - GET /internal/users/{id}
+    - Internal service endpoint (no auth required for dev)
+    - curl: `curl -sS http://localhost:8084/internal/users/1`
+
 - Authentication
   - POST /auth/register
     - Body: { username, email, password, firstName?, lastName? }
@@ -99,6 +104,11 @@ This document lists all current HTTP endpoints across the Auth, Team, and Task s
 - Health
   - GET /healthz
     - curl: `curl -sS http://localhost:8083/healthz`
+
+- Internal endpoints
+  - GET /internal/teams/{id}/members
+    - Internal service endpoint (requires internal token)
+    - curl: `curl -sS -H "X-Internal-Token: $INTERNAL_TOKEN" http://localhost:8083/internal/teams/1/members`
 
 - Teams
   - GET /teams
