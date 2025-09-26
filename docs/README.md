@@ -2,13 +2,13 @@
 
 **Distributed Systems Lab Project**
 
-**Team Members**: Ziyi Hong, Danylo Tulainov
+**Team Members**: Ziyi Hong, Danylo Tulainov. 
 **Roles**: Frontend developer(Danylo), Backend developer(Ziyi)
 
-**GitHub Repository**: [https://github.com/VerSysLabTin23/TodolistProject](https://github.com/VerSysLabTin23/TodolistProject)  
+**GitHub Repository**: [TodolistProject](https://github.com/VerSysLabTin23/TodolistProject)  
 
-All documentation is available in the `docs/` folder of the repository.
-
+All documentation is available in the `docs/` folder of the repository.  
+Cheeck the documentation in github pages <https://versyslabtin23.github.io/TodolistProject/>
 
 ---
 

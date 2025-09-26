@@ -237,4 +237,4 @@ Notes
 - Replace `$ACCESS`/`$REFRESH` with real tokens from the Auth login/refresh responses.
 - Error responses follow `{ code, message }` shape across services.
 
-
+\newpage
