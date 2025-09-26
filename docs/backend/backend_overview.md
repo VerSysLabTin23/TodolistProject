@@ -46,10 +46,9 @@ The backend consists of 5 microservices communicating through REST APIs and Kafk
 
 ## Key Features
 
-- **Event-Driven Architecture**: Services communicate via Kafka events
+- **Event-Driven Architecture**: Realtime and Notification communicate with other services via Kafka events
 - **Real-time Collaboration**: WebSocket-based live updates
 - **Team-based Partitioning**: Kafka events partitioned by team ID for ordering
-- **Horizontal Scaling**: Services designed for multiple instances
 - **JWT Authentication**: Stateless authentication across services
 
 \newpage

@@ -8,9 +8,9 @@
 ### 1.1 General Overview
 **Solution**  
 This project is a distributed Todo application system designed with a microservices architecture.  
-The initial design followed a pure microservices approach, but later—due to requirements from another course (Verteilte Systeme)—we extended the system with Apache Kafka.
-This addition introduced an event-driven component, where Apache Kafka serves as the message middleware to enable asynchronous communication between the backend core business services (task,team,auth services), realtime service and notification service. 
-Kafka was implemented after the development of core business services. So it doesn't support the communication between the three core business services. Those three core business services still communicate with API request.
+The initial design followed a pure microservices approach, but later—due to requirements from another course (Verteilte Systeme)—we extended the system with Apache Kafka.   
+This addition introduced an event-driven component, where Apache Kafka serves as the message middleware to enable asynchronous communication between the backend core business services (task,team,auth services), realtime service and notification service.   
+Kafka was implemented after the development of core business services. So it doesn't support the communication between the three core business services. The business services (Auth, Task, Team) communicate via REST APIs. Task, Team and Auth services publish events to Kafka. Realtime and Notification services consume these events for real-time updates and email notifications.
 
 
 **Core Architecture Features:**  

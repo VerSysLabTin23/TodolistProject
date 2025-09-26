@@ -1,7 +1,7 @@
 # Kafka Documentation
 
 ## Overview
-**Apache Kafka** serves as the message broker and event streaming platform for the entire application.  
+**Apache Kafka** serves as the message broker and event streaming platform for the application.  
 It enables asynchronous communication between services and provides event persistence and replay capabilities.
 
 ## Architecture
