@@ -1,50 +1,50 @@
-import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { listTasksForTeam, type Task } from "../../api/task";
-
-export default function TeamCompletedPage() {
-    const { id } = useParams();
-    const teamId = Number(id);
-    const [tasks, setTasks] = useState<Task[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        (async () => {
-            try {
-                setLoading(true);
-                const all = await listTasksForTeam(teamId);
-                setTasks(all.filter(t => t.completed));
-            } catch (e) {
-                setError(e instanceof Error ? e.message : String(e));
-            } finally {
-                setLoading(false);
-            }
-        })();
-    }, [teamId]);
-
-    if (loading) return <div>Loading…</div>;
-    if (error) return <div style={{ color: "crimson" }}>{error}</div>;
-
-    return (
-        <div>
-            <h2>Completed tasks</h2>
-            <Link to={`/teams/${teamId}`}>&larr; Back to team</Link>
-            {tasks.length === 0 ? (
-                <div style={{ padding: 12, color: "#6b7280" }}>No completed tasks.</div>
-            ) : (
-                <ul style={{ listStyle: "none", padding: 0 }}>
-                    {tasks.map((t) => (
-                        <li key={t.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8 }}>
-                            <strong style={{ textDecoration: "line-through" }}>{t.title}</strong>
-                            <div style={{ fontSize: 12, color: "#6b7280" }}>
-                                {t.priority ? `[${t.priority}] • ` : ""}{t.due ? `due ${t.due}` : ""}
-                            </div>
-                            <div style={{ whiteSpace: "pre-wrap", marginTop: 4 }}>{t.description || ""}</div>
-                        </li>
-                    ))}
-                </ul>
-            )}
-        </div>
-    );
-}
+// import { useEffect, useState } from "react";
+// import { useParams, Link } from "react-router-dom";
+// import { listTasksForTeam, type Task } from "../../api/task";
+//
+// export default function TeamCompletedPage() {
+//     const { id } = useParams();
+//     const teamId = Number(id);
+//     const [tasks, setTasks] = useState<Task[]>([]);
+//     const [loading, setLoading] = useState(true);
+//     const [error, setError] = useState<string | null>(null);
+//
+//     useEffect(() => {
+//         (async () => {
+//             try {
+//                 setLoading(true);
+//                 const all = await listTasksForTeam(teamId);
+//                 setTasks(all.filter(t => t.completed));
+//             } catch (e) {
+//                 setError(e instanceof Error ? e.message : String(e));
+//             } finally {
+//                 setLoading(false);
+//             }
+//         })();
+//     }, [teamId]);
+//
+//     if (loading) return <div>Loading…</div>;
+//     if (error) return <div style={{ color: "crimson" }}>{error}</div>;
+//
+//     return (
+//         <div>
+//             <h2>Completed tasks</h2>
+//             <Link to={`/teams/${teamId}`}>&larr; Back to team</Link>
+//             {tasks.length === 0 ? (
+//                 <div style={{ padding: 12, color: "#6b7280" }}>No completed tasks.</div>
+//             ) : (
+//                 <ul style={{ listStyle: "none", padding: 0 }}>
+//                     {tasks.map((t) => (
+//                         <li key={t.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8 }}>
+//                             <strong style={{ textDecoration: "line-through" }}>{t.title}</strong>
+//                             <div style={{ fontSize: 12, color: "#6b7280" }}>
+//                                 {t.priority ? `[${t.priority}] • ` : ""}{t.due ? `due ${t.due}` : ""}
+//                             </div>
+//                             <div style={{ whiteSpace: "pre-wrap", marginTop: 4 }}>{t.description || ""}</div>
+//                         </li>
+//                     ))}
+//                 </ul>
+//             )}
+//         </div>
+//     );
+// }

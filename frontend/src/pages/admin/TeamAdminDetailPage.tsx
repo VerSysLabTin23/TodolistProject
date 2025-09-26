@@ -1,3 +1,15 @@
+// Admin detail screen for a single team.
+// Lets an admin:
+//   • view/edit team name + description
+//   • list members
+//   • add a member by numeric userId with a chosen role
+//   • change a member's role
+//   • remove a member
+//
+// Data flows:
+//   - On mount: fetch team + members in parallel → populate local state.
+//   - Mutations call API helpers from ../../api/team and then reconcile local state.
+
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
@@ -13,36 +25,41 @@ import {
 } from "../../api/team";
 
 export default function TeamAdminDetailPage() {
+    // Route param (/admin/teams/:id)
     const { id } = useParams<{ id: string }>();
     const teamId = Number(id);
 
+    // Screen state
     const [team, setTeam] = useState<Team | null>(null);
     const [members, setMembers] = useState<TeamMember[]>([]);
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState<string | null>(null);
 
+    // Editable fields for team settings
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
 
-    // add member form
+    // "Add member" form
     const [newUserId, setNewUserId] = useState("");
     const [newRole, setNewRole] = useState<TeamRole>("MEMBER");
-
     const roleOptions: TeamRole[] = ["OWNER", "ADMIN", "MEMBER"];
 
-    // const memberById = useMemo(() => {
-    //     const m = new Map<number, TeamMember>();
-    //     members.forEach((u) => m.set(u.id, u));
-    //     return m;
-    // }, [members]);
-
+    // Initial load: fetch team and members
     useEffect(() => {
         let cancel = false;
+
         async function load() {
-            if (!Number.isFinite(teamId)) { setErr("Invalid team id"); setLoading(false); return; }
+            if (!Number.isFinite(teamId)) {
+                setErr("Invalid team id");
+                setLoading(false);
+                return;
+            }
             setErr(null);
             try {
-                const [t, ms] = await Promise.all([getTeamById(teamId), listTeamMembers(teamId)]);
+                const [t, ms] = await Promise.all([
+                    getTeamById(teamId),
+                    listTeamMembers(teamId),
+                ]);
                 if (cancel) return;
                 setTeam(t);
                 setMembers(ms);
@@ -54,10 +71,12 @@ export default function TeamAdminDetailPage() {
                 if (!cancel) setLoading(false);
             }
         }
+
         void load();
         return () => { cancel = true; };
     }, [teamId]);
 
+    // Save team settings (name/description)
     async function onSaveTeam() {
         try {
             const updated = await adminUpdateTeam(teamId, {
@@ -70,6 +89,7 @@ export default function TeamAdminDetailPage() {
         }
     }
 
+    // Add a member by numeric userId, with role
     async function onAddMember(e: React.FormEvent) {
         e.preventDefault();
         const uid = Number(newUserId);
@@ -80,6 +100,7 @@ export default function TeamAdminDetailPage() {
         try {
             const added = await adminAddMember(teamId, uid, newRole);
             setMembers((prev) => {
+                // Deduplicate: replace if already present
                 const exists = prev.some((m) => m.id === added.id);
                 return exists ? prev.map((m) => (m.id === added.id ? added : m)) : [added, ...prev];
             });
@@ -90,6 +111,7 @@ export default function TeamAdminDetailPage() {
         }
     }
 
+    // Remove member (with confirm)
     async function onRemoveMember(userId: number) {
         if (!confirm(`Remove user ${userId} from team?`)) return;
         try {
@@ -100,6 +122,7 @@ export default function TeamAdminDetailPage() {
         }
     }
 
+    // Change role for a specific member
     async function onChangeRole(userId: number, role: TeamRole) {
         try {
             const updated = await adminSetMemberRole(teamId, userId, role);
@@ -109,6 +132,7 @@ export default function TeamAdminDetailPage() {
         }
     }
 
+    // Basic render states
     if (loading) return <div>Loading…</div>;
     if (err) return <div style={{ color: "crimson" }}>{err}</div>;
     if (!team) return <div>Not found</div>;
@@ -117,7 +141,7 @@ export default function TeamAdminDetailPage() {
         <section style={{ maxWidth: 900, margin: "0 auto" }}>
             <h1>Admin: Team #{team.id}</h1>
 
-            {/* Team settings */}
+            {/* Team settings card */}
             <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: 12, marginBottom: 16 }}>
                 <strong>Team settings</strong>
                 <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
@@ -135,10 +159,11 @@ export default function TeamAdminDetailPage() {
                 </div>
             </div>
 
-            {/* Members */}
+            {/* Members card */}
             <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}>
                 <strong>Members</strong>
 
+                {/* Add member form */}
                 <form onSubmit={onAddMember} style={{ display: "flex", gap: 8, margin: "8px 0 12px" }}>
                     <input
                         placeholder="userId"
@@ -154,12 +179,25 @@ export default function TeamAdminDetailPage() {
                     <button type="submit">Add member</button>
                 </form>
 
+                {/* List of members with role picker + remove */}
                 {members.length === 0 ? (
                     <div style={{ color: "#6b7280" }}>No members.</div>
                 ) : (
                     <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
                         {members.map((m) => (
-                            <li key={m.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 8, alignItems: "center", border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 8 }}>
+                            <li
+                                key={m.id}
+                                style={{
+                                    display: "grid",
+                                    gridTemplateColumns: "1fr 1fr 1fr auto",
+                                    gap: 8,
+                                    alignItems: "center",
+                                    border: "1px solid #e5e7eb",
+                                    borderRadius: 8,
+                                    padding: 10,
+                                    marginBottom: 8,
+                                }}
+                            >
                                 <div><strong>#{m.id}</strong></div>
                                 <div>{m.username}</div>
                                 <div>
@@ -173,7 +211,9 @@ export default function TeamAdminDetailPage() {
                                     </select>
                                 </div>
                                 <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                                    <button onClick={() => onRemoveMember(m.id)} style={{ color: "crimson" }}>Remove</button>
+                                    <button onClick={() => onRemoveMember(m.id)} style={{ color: "crimson" }}>
+                                        Remove
+                                    </button>
                                 </div>
                             </li>
                         ))}
