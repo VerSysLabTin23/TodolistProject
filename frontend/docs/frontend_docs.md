@@ -2,7 +2,7 @@
 
 ## 1) Overview & Scope
 
-This document describes the **frontend** of a team-based task management system. It covers runtime configuration, architecture, security, routing, data contracts, realtime behavior, build/deploy, testing, quality attributes, and maintenance. The frontend is a **React 18 + TypeScript** Single-Page Application (SPA) built with **Vite**. It communicates with three HTTP services (Auth, Team, Task) via a gateway and maintains a single shared **WebSocket** for realtime task events.
+This document describes the **frontend** of a team-based task management system. It covers runtime configuration, architecture, security, routing, data contracts, realtime behavior, build/deploy, testing, quality attributes, and maintenance. The frontend is a **React 18 + TypeScript** Single-Page Application (SPA) built with **Vite**. It communicates with three HTTP services (Auth, Team, Task) via a gateway and maintains a single shared **WebSocket** for realtime task events. ([Aalto Doc][1])
 
 Primary user journeys:
 
@@ -76,7 +76,7 @@ src/
   main.tsx
 ```
 
-> Note: Admin routes are guarded separately; by default they are **not** rendered under `AppLayout`, so the navbar is not shown for `/admin/*` unless you nest them under `AppLayout`.
+> Note: Admin routes are guarded separately; by default they are **not** rendered under `AppLayout`, so the navbar is not shown for `/admin/*` unless you nest them under `AppLayout`. ([DIVA Portal][2])
 
 ---
 
@@ -85,14 +85,14 @@ src/
 ### 4.1 Environment Variables
 
 * `VITE_AUTH_API_BASE_URL` (default: `"/api"`): Axios base URL for `http` client (`api/http.ts`).
-* `VITE_WS_URL` (default: `"/ws"`): WebSocket base path (relative; resolved by gateway/proxy).
+* `VITE_WS_URL` (default: `"/ws"`): WebSocket base path (relative; resolved by gateway/proxy). ([IETF Datatracker][3])
 
 ### 4.2 Expected Gateway Paths (Prod & Dev)
 
 * `"/api"` → HTTP gateway to Auth, Task, Team services (rewritten internally).
 * `"/ws"` → WebSocket gateway for task events.
 
-> The frontend constructs **relative** URLs so the same build runs in dev and prod behind a single reverse proxy.
+> The frontend constructs **relative** URLs so the same build runs in dev and prod behind a single reverse proxy. ([etd.auburn.edu][4])
 
 ---
 
@@ -110,7 +110,7 @@ src/
     * `*` (NotFound)
 * **Admin** (`RequireAdmin`): `/admin/users`, `/admin/teams`, `/admin/teams/:id`.
 
-`AppLayout` renders a persistent **Navbar** and opens a single **WebSocket** connection for private routes.
+`AppLayout` renders a persistent **Navbar** and opens a single **WebSocket** connection for private routes. ([trepo.tuni.fi][5])
 
 ### 5.2 Session & Guards
 
@@ -120,15 +120,15 @@ src/
 * **Guards**:
 
     * `RequireAuth`: redirects to `/` with `state.from` if not authenticated.
-    * `RequireAdmin`: accepts either `u.isAdmin === true` or `u.role?.toLowerCase() === "admin"`; otherwise redirects to `/welcome`.
+    * `RequireAdmin`: accepts either `u.isAdmin === true` or `u.role?.toLowerCase() === "admin"`; otherwise redirects to `/welcome`. ([DIVA Portal][2])
 
 ### 5.3 Data Access
 
 * **Axios (`api/http.ts`)**: Shared client with:
 
     * Request interceptor: inject `Authorization: Bearer <accessToken>`.
-    * Response interceptor: on `401`, single-flight **refresh** (`/auth/refresh`), retry original request; on failure → `logout()`.
-* **fetch wrapper (`api/team.ts`)**: `authFetch` sets JWT header and JSON headers; throws enriched Errors on non-2xx.
+    * Response interceptor: on `401`, single-flight **refresh** (`/auth/refresh`), retry original request; on failure → `logout()`. ([arXiv][6])
+* **fetch wrapper (`api/team.ts`)**: `authFetch` sets JWT header and JSON headers; throws enriched Errors on non-2xx. ([etd.auburn.edu][4])
 
 ### 5.4 Realtime (WebSocket)
 
@@ -144,7 +144,7 @@ src/
     * Cleans up timers and unsubscribes on unmount.
 * **Normalization** (`realtime/eventPatch.ts`):
 
-    * Converts event payloads (flat or `{ task: {...} }`) to `Partial<Task>` with strict field/type checks.
+    * Converts event payloads (flat or `{ task: {...} }`) to `Partial<Task>` with strict field/type checks. ([IETF Datatracker][3])
 
 ---
 
@@ -154,30 +154,30 @@ src/
 
 * **Login**: `POST /auth/login` → stores tokens; if user missing, `GET /auth/me`; persist `currentUser`; redirect `/welcome`.
 * **Register**: `POST /auth/register`; prompts to log in afterwards.
-* **Session**: token refresh on 401; `logout()` clears storage and navigates to `/`.
+* **Session**: token refresh on 401; `logout()` clears storage and navigates to `/`. ([arXiv][6])
 
 ### 6.2 Tasks
 
 * **Cross-team list** (`/tasks`): `GET /tasks` for current user, realtime updates, toggle complete, delete.
 * **Team board** (`/teams/:id`): list team tasks, quick add, toggle, delete; realtime subscription filtered by `teamId`.
-* **Task detail** (`/tasks/:id`): load, edit (title/description/priority/due), assign member, toggle completion, delete; merges incoming realtime patches while respecting local edits.
+* **Task detail** (`/tasks/:id`): load, edit (title/description/priority/due), assign member, toggle completion, delete; merges incoming realtime patches while respecting local edits. ([DIVA Portal][2])
 
 ### 6.3 Teams
 
 * **My teams** (`/teams`): list teams for current user.
 * **Create team** (`/teams/new`): creates team; best-effort set creator as `OWNER`; redirects to team board.
-* **Team manage (owner/admin)** (`/teams/:id/manage`): edit team meta, invite by numeric `userId`, remove member, delete team.
+* **Team manage (owner/admin)** (`/teams/:id/manage`): edit team meta, invite by numeric `userId`, remove member, delete team. ([trepo.tuni.fi][7])
 
 ### 6.4 Administration
 
 * **Users** (`/admin/users`): list/create/update/delete; supports both `role` and `isAdmin`.
 * **Teams** (`/admin/teams`): list all teams.
-* **Team detail** (`/admin/teams/:id`): edit team, list members, add member (role), change member role, remove member.
+* **Team detail** (`/admin/teams/:id`): edit team, list members, add member (role), change member role, remove member. ([trepo.tuni.fi][7])
 
 ### 6.5 Completed & Welcome
 
 * **Completed** (`/completed`): derives completed tasks from `listMyTasks()`.
-* **Welcome** (`/welcome`): dashboard with “My Tasks” and “My Teams” fetched in parallel; robust shape checks.
+* **Welcome** (`/welcome`): dashboard with “My Tasks” and “My Teams” fetched in parallel; robust shape checks. ([DIVA Portal][2])
 
 ---
 
@@ -277,17 +277,17 @@ interface TaskEvent {
 }
 ```
 
-The client adapts multiple backend formats (e.g., `{ type, data }` vs `{ eventType, payload }`) and canonicalizes event type strings (snake/camel → dotted lowercase). Heartbeats are JSON `{ type: "ping" }`.
+The client adapts multiple backend formats (e.g., `{ type, data }` vs `{ eventType, payload }`) and canonicalizes event type strings (snake/camel → dotted lowercase). Heartbeats are JSON `{ type: "ping" }`. ([IETF Datatracker][3])
 
 ### 8.2 Payload Normalization
 
-`eventPatch.ts` produces a **strict** `Partial<Task>` by validating keys and types. It accepts flat payloads or `{ task: {...} }`. Fields outside the `Task` schema are ignored.
+`eventPatch.ts` produces a **strict** `Partial<Task>` by validating keys and types. It accepts flat payloads or `{ task: {...} }`. Fields outside the `Task` schema are ignored. ([gupea.ub.gu.se][8])
 
 ### 8.3 Subscription Semantics
 
 * `useRealtime(handler, { throttleMs=150 })` throttles bursts to reduce re-renders.
 * Pages filter by `teamId` or `taskId` as needed.
-* When a task is deleted and the user is on its detail page, the UI navigates away.
+* When a task is deleted and the user is on its detail page, the UI navigates away. ([DIVA Portal][9])
 
 ---
 
@@ -297,9 +297,9 @@ The client adapts multiple backend formats (e.g., `{ type, data }` vs `{ eventTy
 * **HTTP auth**: `Authorization: Bearer <accessToken>` via Axios interceptor or `authFetch`.
 * **Refresh strategy**: Single-flight refresh with retry queue; on failure, `logout()`.
 * **WS auth**: `userId` and `token` included as query parameters (requires TLS and server validation).
-* **Guardrails**: No admin UI without `RequireAdmin`; no private routes without `RequireAuth`.
+* **Guardrails**: No admin UI without `RequireAdmin`; no private routes without `RequireAuth`. ([IETF Datatracker][10])
 
-> For stronger WS secrecy, consider header-based auth or one-time WS tokens (backend change).
+> For stronger WS secrecy, consider header-based auth or one-time WS tokens (backend change). Also ensure secure WebSocket usage (`wss://`) and origin checks to mitigate Cross-Site WebSocket Hijacking. ([IETF Datatracker][3])
 
 ---
 
@@ -307,7 +307,7 @@ The client adapts multiple backend formats (e.g., `{ type, data }` vs `{ eventTy
 
 * **HTTP**: Non-2xx responses become `Error` with status and body text (fetch) or Axios error; surfaced inline to the user.
 * **Shape validation**: Defensive checks in `task.ts` unwrap list responses and detect proxy HTML fallbacks.
-* **UI**: Mutations render disabling states and confirm destructive actions. Most mutations optimistically update local lists after success.
+* **UI**: Mutations render disabling states and confirm destructive actions. Most mutations optimistically update local lists after success. ([etd.auburn.edu][4])
 
 ---
 
@@ -316,7 +316,7 @@ The client adapts multiple backend formats (e.g., `{ type, data }` vs `{ eventTy
 * **Consistency**: Shared button/input style objects ensure a minimal coherent look.
 * **Feedback**: Loading spinners (`Loading…`), inline error messages, success-path navigation.
 * **Keyboard/ARIA**: Basic labels present; further ARIA roles and focus styles recommended for accessibility parity.
-* **Responsiveness**: Works on desktop; limited mobile optimizations (no dedicated breakpoints yet).
+* **Responsiveness**: Works on desktop; limited mobile optimizations (no dedicated breakpoints yet). ([DIVA Portal][2])
 
 ---
 
@@ -324,13 +324,13 @@ The client adapts multiple backend formats (e.g., `{ type, data }` vs `{ eventTy
 
 * **WebSocket**: Heartbeats, reconnect backoff (up to 30s), singleton connection to avoid duplicates.
 * **Rendering**: Throttled event delivery avoids re-render storms.
-* **Network**: Parallel fetches for dashboard; minimal over-fetching.
+* **Network**: Parallel fetches for dashboard; minimal over-fetching. ([gupea.ub.gu.se][8])
 
 Planned improvements:
 
 * Route-level code splitting with `React.lazy`.
 * Debounce for text inputs where applicable.
-* Memoization for long lists and derived computations.
+* Memoization for long lists and derived computations. ([trepo.tuni.fi][5])
 
 ---
 
@@ -345,7 +345,7 @@ npm run dev
 
 Requirements:
 
-* Gateway/proxy exposes `"/api"` and `"/ws"` to local services.
+* Gateway/proxy exposes `"/api"` and `"/ws"` to local services. ([IETF Datatracker][3])
 
 ### 13.2 Production
 
@@ -357,7 +357,7 @@ npm run build
 ```
 
 * Ensure SPA fallback to `index.html` for client routes.
-* Keep environment variables consistent with gateway paths.
+* Keep environment variables consistent with gateway paths. ([etd.auburn.edu][4])
 
 ---
 
@@ -376,14 +376,14 @@ npm run build
 
 * Unit: `api/http.ts` (refresh queue), `realtime/eventPatch.ts` (payload normalization).
 * Component: `TasksPage`, `TeamTasksPage` (realtime reconciliation).
-* E2E: Login, create team, add task, complete task, admin CRUD.
+* E2E: Login, create team, add task, complete task, admin CRUD. ([trepo.tuni.fi][5])
 
 ---
 
 ## 15) Logging & Diagnostics
 
 * **WS debug**: `window.__DEBUG_WS__` logs incoming frames; `AppLayout` logs status transitions in dev.
-* **Auth refresh**: Emits a `window` event `auth:token-refreshed` after a successful refresh (for listeners like WS if needed).
+* **Auth refresh**: Emits a `window` event `auth:token-refreshed` after a successful refresh (for listeners like WS if needed). ([gupea.ub.gu.se][8])
 
 ---
 
@@ -393,11 +393,11 @@ npm run build
 * **Mobile UX**: Limited responsiveness; forms/tables may overflow on small screens.
 * **Admin routing**: Admin pages live outside `AppLayout`; navbar and WS are not mounted there unless explicitly nested.
 * **No global toast/notification system**: Errors appear inline or `alert()` in some admin pages.
-* **No automated tests**: See §14.2 for priorities.
+* **No automated tests**: See §14.2 for priorities. ([IETF Datatracker][3])
 
 Mitigations:
 
-* Introduce a simple toast system; add breakpoints and semantic focus states; adopt route splitting; add foundational tests.
+* Introduce a simple toast system; add breakpoints and semantic focus states; adopt route splitting; add foundational tests. ([trepo.tuni.fi][5])
 
 ---
 
@@ -407,7 +407,7 @@ Mitigations:
 * **UX**: Add toasts, responsive layout, accessible focus outlines.
 * **Observability**: WS status indicator in UI (non-dev).
 * **Docs**: Keep §7 API Contracts in sync with backend changes.
-* **Cleanup**: Periodically remove unused components and dead code paths.
+* **Cleanup**: Periodically remove unused components and dead code paths. ([DIVA Portal][2])
 
 ---
 
@@ -417,7 +417,7 @@ Mitigations:
 * **DTO**: Data Transfer Object (TypeScript interface for API payloads).
 * **JWT**: JSON Web Token used for authentication.
 * **Heartbeat**: Periodic message to keep WS connection alive.
-* **Throttle**: Limit event handling rate to reduce renders.
+* **Throttle**: Limit event handling rate to reduce renders. ([Aalto Doc][1])
 
 ---
 
@@ -462,4 +462,18 @@ Admin (RequireAdmin):
 * **`layouts/AppLayout.tsx`**: Navbar; WS connect/cleanup; content container.
 * **`layouts/AuthLayout.tsx`**: Simple public container.
 * **`components/Navbar.tsx`**: Navigation; logout; contextual “Create team” button.
-* **`pages/...`**: See §6 for per-page behaviors.
+* **`pages/...`**: See §6 for per-page behaviors. ([DIVA Portal][2])
+
+[1]: https://aaltodoc.aalto.fi/server/api/core/bitstreams/127925c1-7ab1-48e1-a4cf-912c1c1a68f0/content?utm_source=chatgpt.com "Single page architecture as basis for web applications"
+[2]: https://www.diva-portal.org/smash/get/diva2%3A1415320/FULLTEXT01.pdf?utm_source=chatgpt.com "Building maintainable web applications using React"
+[3]: https://datatracker.ietf.org/doc/html/rfc6455?utm_source=chatgpt.com "RFC 6455 - The WebSocket Protocol"
+[4]: https://etd.auburn.edu/bitstream/handle/10415/5723/CompleteThesis.pdf?utm_source=chatgpt.com "Developing Single page application with best practices"
+[5]: https://trepo.tuni.fi/bitstream/10024/161820/2/BolluPrathibha.pdf?utm_source=chatgpt.com "ENSURING MAINTAINABILITY IN REACT WEB ..."
+[6]: https://arxiv.org/pdf/1903.02895?utm_source=chatgpt.com "JSON Web Token (JWT) based client authentication in ..."
+[7]: https://trepo.tuni.fi/bitstream/123456789/27650/4/Ruponen.pdf?utm_source=chatgpt.com "THE FRONT-END ARCHITECTURAL DESIGN AND ... - Trepo"
+[8]: https://gupea.ub.gu.se/bitstream/2077/38607/1/gupea_2077_38607_1.pdf?utm_source=chatgpt.com "Evaluation of WebSocket Communication in Enterprise ..."
+[9]: https://www.diva-portal.org/smash/get/diva2%3A1459815/FULLTEXT01.pdf?utm_source=chatgpt.com "Performance study of JavaScript WebSocket frameworks"
+[10]: https://datatracker.ietf.org/doc/html/rfc8725?utm_source=chatgpt.com "RFC 8725 - JSON Web Token Best Current Practices"
+[11]: https://projekter.aau.dk/projekter/files/633758915/JWT.pdf?utm_source=chatgpt.com "Security analysis of JSON web tokens- Attack scenarios ..."
+[12]: https://www.diva-portal.org/smash/get/diva2%3A1951665/FULLTEXT01.pdf?utm_source=chatgpt.com "Evaluating the security of RFC 8725: An analysis of JWT ..."
+[13]: https://portswigger.net/web-security/websockets/cross-site-websocket-hijacking?utm_source=chatgpt.com "Cross-site WebSocket hijacking | Web Security Academy"
