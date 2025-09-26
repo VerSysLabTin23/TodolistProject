@@ -128,3 +128,4 @@ export async function inviteByUsername(teamId: number, username: string, role: T
     throw new Error("Invites by username are not enabled on this backend. Please add members by user ID.");
 }
 export { adminRemoveMember as removeMember };
+export const addMemberById = adminAddMember;

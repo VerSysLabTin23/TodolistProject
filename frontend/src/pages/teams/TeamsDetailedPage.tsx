@@ -3,8 +3,8 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import {
     getTeamById,
     listTeamMembers,
-    inviteByUsername,
-    removeMember,
+    adminAddMember,
+    adminRemoveMember,
     updateTeam,
     deleteTeam,
     type Team,
@@ -34,7 +34,8 @@ export default function TeamsDetailedPage() {
     });
 
     const [form, setForm] = useState<TeamPatch>({ name: "", description: "" });
-    const [inviteName, setInviteName] = useState("");
+    const [inviteId, setInviteId] = useState<string>("");
+
     const dirty = useMemo(
         () =>
             state.team
@@ -64,9 +65,7 @@ export default function TeamsDetailedPage() {
                 }));
             }
         })();
-        return () => {
-            cancel = true;
-        };
+        return () => { cancel = true; };
     }, [teamId]);
 
     async function onSaveTeam(e: React.FormEvent) {
@@ -90,15 +89,23 @@ export default function TeamsDetailedPage() {
 
     async function onInvite(e: React.FormEvent) {
         e.preventDefault();
-        if (!inviteName.trim() || !state.team) return;
+        if (!state.team) return;
+
+        const trimmed = inviteId.trim();
+        if (!/^\d+$/.test(trimmed)) {
+            setState(s => ({ ...s, error: "Please enter a numeric user ID." }));
+            return;
+        }
+        const userId = Number(trimmed);
+
         try {
-            setState((s) => ({ ...s, saving: true, error: null }));
-            await inviteByUsername(state.team.id, inviteName.trim(), "MEMBER");
+            setState(s => ({ ...s, saving: true, error: null }));
+            await adminAddMember(state.team.id, userId, "MEMBER");
             const ms = await listTeamMembers(state.team.id);
-            setState((s) => ({ ...s, members: ms, saving: false }));
-            setInviteName("");
+            setState(s => ({ ...s, members: ms, saving: false }));
+            setInviteId("");
         } catch (e) {
-            setState((s) => ({
+            setState(s => ({
                 ...s,
                 saving: false,
                 error: e instanceof Error ? e.message : String(e),
@@ -111,7 +118,7 @@ export default function TeamsDetailedPage() {
         if (!confirm("Remove this member from the team?")) return;
         try {
             setState((s) => ({ ...s, saving: true, error: null }));
-            await removeMember(state.team.id, userId);
+            await adminRemoveMember(state.team.id, userId);
             setState((s) => ({
                 ...s,
                 members: s.members.filter((m) => m.id !== userId),
@@ -150,7 +157,7 @@ export default function TeamsDetailedPage() {
         <div style={{ maxWidth: 760 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
                 <h2 style={{ margin: 0 }}>Team #{state.team.id}</h2>
-                <Link to="/teams">Back to Teams</Link>
+                <Link to={`/teams/${teamId}`}>Back to Team tasks</Link>
                 <div style={{ marginLeft: "auto" }}>
                     <button onClick={onDeleteTeam} style={btnDanger} disabled={state.saving}>
                         Delete team
@@ -185,16 +192,18 @@ export default function TeamsDetailedPage() {
                 </div>
             </form>
 
-            {/* Invite */}
+            {/* Invite by numeric userID */}
             <form onSubmit={onInvite} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 20 }}>
-                <strong>Invite by username:</strong>
+                <strong>Invite by user ID:</strong>
                 <input
-                    value={inviteName}
-                    onChange={(e) => setInviteName(e.target.value)}
-                    placeholder="e.g. alice"
-                    style={{ ...input, maxWidth: 240 }}
+                    value={inviteId}
+                    onChange={(e) => setInviteId(e.target.value)}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="e.g. 42"
+                    style={{ ...input, maxWidth: 180 }}
                 />
-                <button type="submit" disabled={!inviteName.trim() || state.saving} style={btnSecondary}>
+                <button type="submit" disabled={!inviteId.trim() || state.saving} style={btnSecondary}>
                     Invite
                 </button>
             </form>
@@ -207,8 +216,7 @@ export default function TeamsDetailedPage() {
                 ) : (
                     <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
                         {state.members.map((m) => (
-                            <li
-                                key={m.id}
+                            <li key={m.id}
                                 style={{
                                     display: "flex",
                                     alignItems: "center",
@@ -217,8 +225,7 @@ export default function TeamsDetailedPage() {
                                     border: "1px solid #e5e7eb",
                                     borderRadius: 8,
                                     marginBottom: 8,
-                                }}
-                            >
+                                }}>
                                 <div style={{ flex: 1 }}>
                                     <strong>{m.username}</strong>{" "}
                                     <span style={{ color: "#6b7280" }}>({m.role})</span>

@@ -20,6 +20,7 @@ import UsersAdminPage from "./pages/admin/UsersAdminPage.tsx";
 import TeamsAdminPage from "./pages/admin/TeamsAdminPage.tsx";
 import TeamAdminDetailPage from "./pages/admin/TeamAdminDetailPage.tsx";
 import CompletedPage from "./pages/CompletedPage";
+import TeamTasksPage from "./pages/teams/TeamTasksPage.tsx";
 
 // IMPORTANT: keep WS mounted only for authenticated routes
 import RealtimeRoot from "./realtime/RealtimeRoot";
@@ -53,7 +54,8 @@ export default function App() {
                             <Route path="/welcome" element={<WelcomePage />} />
                             <Route path="/teams" element={<TeamsPage />} />
                             <Route path="/teams/new" element={<CreateTeamPage />} />
-                            <Route path="/teams/:id" element={<TeamsDetailedPage />} />
+                            <Route path="/teams/:id" element={<TeamTasksPage />} />
+                            <Route path="/teams/:id/manage" element={<TeamsDetailedPage />} />
                             <Route path="/tasks" element={<TasksPage />} />
                             <Route path="/tasks/:id" element={<TaskDetailsPage />} />
                             <Route path="/completed" element={<CompletedPage />} />

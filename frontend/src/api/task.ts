@@ -61,8 +61,27 @@ export async function listTasksForTeam(teamId: number): Promise<Task[]> {
 
 /* ---------- Create ---------- */
 
-export async function createTaskInTeam(teamId: number, input: CreateTaskInput): Promise<Task> {
-    const { data } = await http.post<Task>(`/tasks/teams/${teamId}/tasks`, input);
+// export async function createTaskInTeam(teamId: number, input: CreateTaskInput): Promise<Task> {
+//     const { data } = await http.post<Task>(`/tasks/teams/${teamId}/tasks`, input);
+//     return data;
+// }
+export async function createTaskInTeam(
+    teamId: number,
+    input: CreateTaskInput
+): Promise<Task> {
+    // Build payload with only defined values and include teamId.
+    const payload: Record<string, unknown> = {
+        teamId,
+        title: (input.title || "").trim(),
+    };
+    if (!payload.title) throw new Error("Title is required");
+
+    if (input.description) payload.description = input.description;
+    if (input.priority) payload.priority = input.priority;
+    if (input.due) payload.due = input.due; // must be YYYY-MM-DD if used
+    if (typeof input.assigneeId === "number") payload.assigneeId = input.assigneeId;
+
+    const { data } = await http.post<Task>(`/api/tasks/teams/${teamId}/tasks`, payload);
     return data;
 }
 
