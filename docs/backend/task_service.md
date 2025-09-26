@@ -4,6 +4,8 @@
 The **Task Service** handles task management operations including CRUD operations, task assignment, and real-time event publishing.  
 It integrates with the **Team Service** for permission validation and publishes events to **Kafka** for real-time updates.
 
+- Task service API doc: [Task API](../../task/api/task.yml)
+
 ## Architecture
 - **Port**: `8081`  
 - **Database**: MySQL (`3306`)  

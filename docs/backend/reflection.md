@@ -22,7 +22,8 @@
   - Database: consider PostgreSQL for better JSON support.
   - **Redis for caching**: The current system lacks caching, leading to repeated database queries for user authentication, team membership validation, and task data. Redis would significantly improve performance by caching frequently accessed data. It was planned, but didn't have enough time to implement it. I think there is a bottleneck in ws, because of the repeated queries for user authentication and team membership validation, with cache it will be faster and more efficient.
 - Process: comprehensive testing strategy, automated deployment.
-- Data Handling: Implement stricter schema validation and especially need **better error reportin** for format mismatches
+- Data Handling: Implement stricter schema validation and especially need **better error reporting** for format mismatches
+- Development Process: I should have worked on frontend parallel with backend development. Less backend development and do more frontend work so that we could present the project more visually. Now even though we have a "laufbar und umfassend" backend, we don't have the frontend to showcase it.
 
 ## Key Learnings
 1. Distributed System Design Principles:

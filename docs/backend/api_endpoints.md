@@ -8,6 +8,15 @@ This document lists all current HTTP endpoints across the Auth, Team, and Task s
   - Task: http://localhost:8081
 - Unless noted, endpoints return JSON. Most endpoints require Authorization: Bearer <accessToken>.
 
+
+### Swagger
+
+You can check our API documentation in swagger editor by importing the file in it.
+- Task service API doc: [Task API](../../task/api/task.yml)
+- Team service API doc: [Team API](../../team/api/team.yml)
+- Auth service API doc: [Auth API](../../auth/api/auth.yml)
+
+
 ### Auth Service (localhost:8084)
 
 - Health

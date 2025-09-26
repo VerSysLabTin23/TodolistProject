@@ -244,3 +244,5 @@ Implemented via WebSockets:
 The frontend demonstrates a **working multi-service React application** that connects to several backend services via Nginx. Despite unresolved issues, the architecture is extensible and provides a clear separation of concerns.
 
 The project highlights both the **strengths of modern SPA development** and the **challenges of microservice integration under real-world constraints**.
+
+\newpage
