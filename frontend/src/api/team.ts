@@ -46,13 +46,13 @@ export async function addMember(teamId: number, userId: number, role: TeamRole):
     return res.json() as Promise<TeamMember>;
 }
 
-export async function inviteByUsername(teamId: number, username: string, role: TeamRole = "MEMBER"): Promise<TeamMember> {
-    const res = await authFetch(`${API}/teams/${teamId}/members/invite`, {
-        method: "POST",
-        body: JSON.stringify({ username, role }),
-    });
-    return res.json() as Promise<TeamMember>;
-}
+// export async function inviteByUsername(teamId: number, username: string, role: TeamRole = "MEMBER"): Promise<TeamMember> {
+//     const res = await authFetch(`${API}/teams/${teamId}/members/invite`, {
+//         method: "POST",
+//         body: JSON.stringify({ username, role }),
+//     });
+//     return res.json() as Promise<TeamMember>;
+// }
 
 /* -------- Queries -------- */
 export async function listUserTeams(userId: number): Promise<Team[]> {
@@ -102,9 +102,9 @@ export async function adminSetMemberRole(teamId: number, userId: number, role: T
     });
     return res.json() as Promise<TeamMember>;
 }
+
 export async function updateTeam(teamId: number, patch: TeamPatch): Promise<Team> {
-    // same endpoint you already use for adminUpdateTeam; non-admin owners can use it too
-    const res = await authFetch(`/api/teams/teams/${teamId}`, {
+    const res = await authFetch(`/api/teams/${teamId}`, {
         method: "PUT",
         body: JSON.stringify(patch),
     });
@@ -112,8 +112,19 @@ export async function updateTeam(teamId: number, patch: TeamPatch): Promise<Team
 }
 
 export async function deleteTeam(teamId: number): Promise<void> {
-    await authFetch(`/api/teams/teams/${teamId}`, { method: "DELETE" });
+    await authFetch(`/api/teams/${teamId}`, { method: "DELETE" });
 }
+export async function inviteByUsername(teamId: number, username: string, role: TeamRole = "MEMBER"): Promise<TeamMember> {
+    // Try preferred invite endpoint first
+    const res = await authFetch(`/api/teams/${teamId}/members/invite`, {
+        method: "POST",
+        body: JSON.stringify({ username, role }),
+    }).catch(() => null);
 
-// Optional friendly aliases reusing what you already have:
-export const removeMember = adminRemoveMember;
+    if (res) return res.json() as Promise<TeamMember>;
+
+    // Fallback: if /invite is not implemented, backend might require userId instead.
+    // (Up to you: look up userId by username via Auth service, or show a message.)
+    throw new Error("Invites by username are not enabled on this backend. Please add members by user ID.");
+}
+export { adminRemoveMember as removeMember };
